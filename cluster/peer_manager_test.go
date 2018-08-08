@@ -1,0 +1,58 @@
+package cluster_test
+
+import (
+	"dgateway/cluster"
+	"dgateway/node"
+	pb "dgateway/proto"
+	"fmt"
+	"net"
+	"testing"
+
+	"google.golang.org/grpc"
+)
+
+func startServer(port int) *grpc.Server {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		panic(fmt.Sprintf("failed to listen: %v", err))
+	}
+	grpcServer := grpc.NewServer(grpc.InitialWindowSize(1048576), grpc.InitialConnWindowSize(10485760))
+	braftNode := &node.BraftNode{}
+	pb.RegisterBraftServer(grpcServer, braftNode)
+	go func() {
+		grpcServer.Serve(lis)
+	}()
+	return grpcServer
+}
+
+func TestFetch(t *testing.T) {
+	server0 := startServer(10001)
+	defer server0.Stop()
+	nodeInfo0 := cluster.NodeInfo{
+		Id:   0,
+		Name: "node0",
+		Url:  "127.0.0.1:10001",
+	}
+	server1 := startServer(10002)
+	defer server1.Stop()
+	nodeInfo1 := cluster.NodeInfo{
+		Id:   1,
+		Name: "node1",
+		Url:  "127.0.0.1:10002",
+	}
+
+	cluster.NodeList = []cluster.NodeInfo{nodeInfo0, nodeInfo1}
+	pm := cluster.NewPeerManager(0, 5, 2)
+	cnt := pm.GetTxConnAvailableCnt(cluster.NodeList)
+	t.Logf("get availble cnt:%d", cnt)
+	pm.NotifySignTx(0, &pb.SignTxRequest{
+		Term: -1,
+	})
+	pm.NotifyCommitMsg(1, &pb.CommitMsg{
+		Term: -1,
+	})
+}
+
+func TestInvoke(t *testing.T) {
+
+}

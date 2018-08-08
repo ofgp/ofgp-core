@@ -1,0 +1,319 @@
+syntax = "proto3";
+
+package proto;
+
+import "dgateway/crypto/crypto.proto";
+
+service Braft {
+    // just for testing
+    rpc Echo(EchoRequest) returns (EchoResponse);
+
+    // Among core nodes in the cluster
+    rpc SyncUp(SyncUpRequest) returns (SyncUpResponse);
+    rpc NotifyInitMsg(InitMsg) returns (Void);
+    rpc NotifyPrepareMsg(PrepareMsg) returns (Void);
+    rpc NotifyCommitMsg(CommitMsg) returns (Void);
+    rpc NotifyWeakAccuse(WeakAccuse) returns (Void);
+    rpc NotifyStrongAccuse(StrongAccuse) returns (Void);
+    rpc NotifyVote(Vote) returns (Void);
+    rpc NotifyTxs(Transactions) returns (Void);
+    rpc NotifySignTx(SignTxRequest) returns (Void);
+    // 新节点加入
+    rpc NotifyJoin(JoinRequest) returns (Void);
+    rpc NotifyJoinCheckSynced(JoinRequest) returns(JoinResponse);
+    rpc NotifyLeave(LeaveRequest) returns (Void);
+    rpc GetClusterNodes(Void) returns (NodeList);
+    rpc WatchSyncUp(SyncUpRequest) returns (SyncUpResponse);
+    rpc NotifySignedResult(SignedResult) returns (Void);
+    //rpc NotifyChainTxIdMsg(ChainTxIdMsg) returns (Void);
+    rpc IsCommited(crypto.Digest256) returns(IsCommitedResponse);
+    //获取节点运行中的info,监听的区块的高度和成为主节点的次数
+    rpc GetNodeRuntimeInfo(Void)returns(NodeRuntimeInfo);
+}
+
+message EchoRequest {
+    int32 nonce = 1;
+}
+
+message EchoResponse {
+    int32 nonce = 1;
+}
+
+message SyncUpRequest {
+    int64 base_height = 1;
+}
+
+message SyncUpByHashRequest{
+    repeated crypto.Digest256 locator = 1;
+}
+
+message SyncUpResponse {
+    repeated BlockPack commits = 1;
+
+    // if {more} is true, {fresh} and {strong_accuse} are nils
+    BlockPack fresh = 2;
+    StrongAccuse strong_accuse = 3;
+    bool more = 4;  // whether has more info to send.
+}
+
+message Void {}
+
+message BchBlockHeader {
+    int32 height = 1;
+    crypto.Digest256 block_id = 2;
+    crypto.Digest256 prev_id = 3;
+}
+
+// AddressInfo 充值到侧链的地址和金额或者提币到主链的地址和金额
+message AddressInfo {
+    string address = 1;
+    int64 amount = 2;
+}
+
+// watcher监测到的主/侧链交易信息
+message WatchedTxInfo {
+    string txid = 1;
+    int64 amount = 2;
+    repeated AddressInfo recharge_list = 3;
+    // 发起交易的链的名称，例如"bch"
+    string from = 4;
+    // 目标链的名称，例如"eth"
+    string to = 5;
+    // BTC/BCH的矿工费
+    int64 fee = 6;
+    // from的token类型
+    uint32 token_from = 7;
+    // to的token类型
+    uint32 token_to = 8;
+}
+
+// 网关在主/侧链上新发起的交易
+message NewlyTx {
+    bytes data = 1;
+}
+
+message Transaction {
+    crypto.Digest256 id = 1;
+    WatchedTxInfo watched_tx = 2;
+    string newly_tx_id = 3;
+    int64 time = 4;
+}
+
+message Transactions {
+    repeated Transaction txs = 1;
+}
+
+// TxLoopupEntry 保存了tx的存储位置信息，哪一个区块里面的第几笔交易
+message TxLookupEntry {
+    int64 height = 1;
+    int32 index = 2;
+}
+
+message Reconfig {
+    enum Type {
+        JOIN = 0;
+        LEAVE = 1;
+    }
+    Type type = 1;
+    string host = 2;
+    int32 node_id = 3;
+}
+
+message Block {
+    int64 timestampMs = 1;
+    crypto.Digest256 prev_block_id = 2;
+
+    enum Type {
+        UNKNOWN = 0;
+        GENESIS = 1;
+        TXS = 2;
+        BCH = 3;
+        RECONFIG = 4;
+    }
+    Type type = 3;
+
+    repeated Transaction txs = 4;
+    BchBlockHeader bch_block_header = 5;
+    Reconfig reconfig = 6;
+    crypto.Digest256 id = 7;
+}
+
+message BlockInfo {
+    int64 term = 1;
+    int64 height = 2;
+    crypto.Digest256 block_id = 3;
+    Block block = 4;
+}
+
+message BlockPack {
+    InitMsg init = 1;
+    // Key is nodeid, must match {init}'s term, height and block_id
+    map<int32, PrepareMsg> prepares = 2;
+    // Key is nodeid, must match {init}'s term, height and block_id
+    map<int32, CommitMsg> commits = 3;
+}
+
+message Votie {
+    int64 term = 1;
+    int64 height = 2;
+    Block block = 3;
+    map<int32, PrepareMsg> prepares = 4; //Key is nodeid
+    map<int32, CommitMsg> commits = 5;
+}
+
+message Vote {
+    int64 term = 1; //vote for raising to this term
+    Votie votie = 2;
+    int32 node_id = 3;
+    bytes sig = 4;
+}
+
+// InitMsgId = Hash("InitMsg", term, height, block_id, node_id, voteid)
+message InitMsg {
+    int64 term = 1;
+    int64 height = 2;
+    Block block = 3;
+    int32 node_id = 4;  //Should always be the leader of term {term}
+    bytes sig = 5;  //InitMsgId signed by the leader
+
+    // only needed when the previous block has a lower term
+    map<int32, Vote> votes = 6;
+}
+
+// PrepareMsgId = Hash("PrepareMsg", term, height, block_id, node_id)
+message PrepareMsg {
+    int64 term = 1;
+    int64 height = 2;
+    crypto.Digest256 block_id = 3;
+    int32 node_id = 4;
+    bytes sig = 5;  //PrepareMsgId signed by node {node_id}
+}
+
+// CommitMsgId = Hash("CommitMsg", term, height, block_id, node_id)
+message CommitMsg {
+    int64 term = 1;
+    int64 height = 2;
+    crypto.Digest256 block_id = 3;
+    int32 node_id = 4;
+    bytes sig = 5;  //CommitMsgId signed by node {node_id}
+}
+
+// WeakAccuseId = Hash("WeakAccuse", term, node_id)
+message WeakAccuse {
+    int64 term = 1; // the accused term
+    int32 node_id = 2;
+    bytes sig = 3;  //WeakAccuseId signed by node {node_id}
+    int64 time = 4;
+}
+
+message WeakAccuses {
+    map<int32, WeakAccuse> accuses = 1;
+}
+
+// a strong accuse has at least f+1 weak accuses
+message StrongAccuse {
+    map<int32, WeakAccuse> weak_accuses = 1;
+}
+
+message SignTxRequest {
+    int64 term = 1;
+    int32 node_id = 2;
+    string multisig_address = 3;
+    WatchedTxInfo watched_tx = 4;
+    NewlyTx newly_tx = 5;
+    bytes sig = 6;
+    int64 time = 7;
+}
+
+enum CodeType {
+    SIGNED = 0;
+    NEEDSYNC = 1;
+    REJECT = 2;
+}
+
+message SignTxResponse {
+    CodeType code = 1;
+    int32 node_id = 2;
+    repeated bytes sig = 3;
+}
+
+message SignedResult {
+    CodeType code = 1;
+    int32 node_id = 2;
+    string tx_id = 3;
+    string to = 4;
+    int64 term = 5;
+    repeated bytes data = 6;
+    bytes sig = 7;
+}
+
+enum TxStatus {
+    WAITING = 0;
+    COMMITTED = 1;
+    REJECTED = 2;
+}
+
+message SignedStatistic {
+    string SignedMsgId = 1;
+    map<int32, CodeType> stat = 2;
+    TxStatus status = 3;
+}
+
+message ChainTxIdMsg {
+    int32 node_id = 1;
+    string tx_id = 2;
+    string sign_msg_id = 3;
+    bytes sig = 4;
+}
+
+message JoinRequest {
+    string host = 1;
+    string pubkey = 2;  //hex
+    Vote vote = 3;
+    bytes sig = 4;
+}
+
+message JoinResponse{
+    int32 nodeID = 1;
+    bool synced = 2;
+}
+
+message LeaveRequest {
+    int32 node_id = 1;
+    string msg = 2;
+    bytes sig = 3;
+}
+
+message NodeInfo {
+    int32 node_id = 1;
+    string name = 2;
+    string pubkey = 3;
+    string host = 4;
+    bool is_normal = 5;
+}
+
+message NodeList {
+    repeated NodeInfo node_list = 1;
+    int32 leader_id = 2;
+}
+
+message AccuseRecord {
+    int64 term = 1;
+    int32 local_id = 2;
+    int32 leader_id = 3;
+    // accuse_type: accuse类型，1表示weak，2表示strong
+    int32 accuse_type = 4;
+    int64 timestamp = 5;
+    string reason = 6;
+}
+
+message IsCommitedResponse{
+    bool commited = 1;
+}
+message NodeRuntimeInfo{
+    int32 nodeID = 1;
+    int64 btcHeight = 2;
+    int64 bchHeight = 3;
+    int64 ethHeight = 4;
+    int32 leaderCnt = 5;
+}

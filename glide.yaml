@@ -1,0 +1,44 @@
+package: dgateway
+import:
+- package: github.com/cpacia/bchutil
+  version: 12e86f41eb040d3b85b5d8e3a3a4bed035517c52
+- package: github.com/golang/protobuf
+  subpackages:
+  - proto
+- package: github.com/gomodule/redigo
+  subpackages:
+  - redis
+- package: github.com/inconshreveable/log15
+- package: github.com/julienschmidt/httprouter
+- package: github.com/olivere/elastic
+- package: github.com/pebbe/zmq4
+- package: github.com/pkg/errors
+- package: github.com/rcrowley/go-metrics
+- package: github.com/rs/cors
+- package: github.com/syndtr/goleveldb
+  subpackages:
+  - leveldb
+  - leveldb/errors
+  - leveldb/filter
+  - leveldb/iterator
+  - leveldb/opt
+  - leveldb/util
+- package: github.com/vrischmann/go-metrics-influxdb
+- package: golang.org/x/net/context
+- package: google.golang.org/grpc
+  subpackages:
+  - connectivity
+- package: gopkg.in/mgo.v2
+- package: gopkg.in/urfave/cli.v1
+ignore:
+- bitcoinWatcher/coinmanager
+- bitcoinWatcher/coinstore
+- bitcoinWatcher/conf
+- bitcoinWatcher/dbop
+- bitcoinWatcher/mortgagewatcher
+- bitcoinWatcher/util
+- ethWatcher
+- github.com/btcsuite/btcd
+- github.com/btcsuite/btcutil
+- github.com/ethereum/go-ethereum
+- github.com/spf13/viper
