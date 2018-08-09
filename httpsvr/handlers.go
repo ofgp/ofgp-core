@@ -277,7 +277,39 @@ func (hd *HTTPHandler) getTokenRegisterID(w http.ResponseWriter, req *http.Reque
 	regID := hd.node.GetTokenRegisterID(chain, contractAddr)
 	writeResponse(&w, newOKData(regID))
 }
-
+func (hd *HTTPHandler) AddTx(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	body := io.LimitReader(req.Body, maxRequestContentLen)
+	tx := new(pb.WatchedTxInfo)
+	if body == nil {
+		fmt.Fprintf(w, "%s", newData(paramErrCode, "tx nil", nil))
+		return
+	}
+	err := json.NewDecoder(body).Decode(tx)
+	if err != nil {
+		fmt.Fprintf(w, "%s", newData(paramErrCode, err.Error(), nil))
+		return
+	}
+	if tx.Txid == "" || tx.Amount < 0 || tx.From == "" || tx.To == "" || tx.Fee < 0 || tx.TokenFrom < 0 || tx.TokenTo < 0 {
+		fmt.Fprintf(w, "%s", newData(paramErrCode, "tx param err", nil))
+		return
+	}
+	if len(tx.RechargeList) == 0 {
+		fmt.Fprintf(w, "%s", newData(paramErrCode, "rechargelist empty", nil))
+		return
+	}
+	for _, addr := range tx.RechargeList {
+		if addr.Address == "" || addr.Amount <= 0 {
+			fmt.Fprintf(w, "%s", newData(paramErrCode, "rechargelist data err", nil))
+			return
+		}
+	}
+	err = hd.node.AddWatchedTx(tx)
+	if err != nil {
+		fmt.Fprintf(w, "%s", newData(sysErrCode, err.Error(), nil))
+		return
+	}
+	writeResponse(&w, newOKData(nil))
+}
 func writeResponse(w *http.ResponseWriter, r interface{}) {
 	rst, err := json.Marshal(r)
 	if err != nil {

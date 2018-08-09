@@ -304,15 +304,6 @@ func GetSignMsg(db *dgwdb.LDBDatabase, msgId string) *pb.SignTxRequest {
 	return pb.UnmarshalSignTxRequest(data)
 }
 
-//DelSignMsg 删除签名标记
-func DelSignMsg(db *dgwdb.LDBDatabase, msgID string) {
-	k := append(keySignMsgPrefix, []byte(msgID)...)
-	err := db.Delete(k)
-	if err != nil {
-		log.Printf("del signmsg err:%v msgID:%s", err, msgID)
-	}
-}
-
 // DeleteSignMsg 清理签名信息
 func DeleteSignMsg(db *dgwdb.LDBDatabase, msgId string) {
 	k := append(keySignMsgPrefix, []byte(msgId)...)

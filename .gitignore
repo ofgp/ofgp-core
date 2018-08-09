@@ -6,3 +6,4 @@ config2.toml
 nonceStore
 *.prof
 vendor
+*.swp

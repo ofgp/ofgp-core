@@ -116,10 +116,12 @@ func run(ctx *cli.Context) {
 	//设置发起accuse 的间隔
 	accuser.AccuseInterval = viper.GetInt64("accuse_interval")
 
+	var joinMsg *node.JoinMsg
 	if startMode == cluster.ModeNormal {
 		cluster.Init()
 	} else {
-		nodeId = node.InitJoin()
+		joinMsg = node.InitJoin()
+		nodeId = joinMsg.LocalID
 	}
 	viper.WatchConfig()
 
@@ -128,7 +130,13 @@ func run(ctx *cli.Context) {
 	if nodeId < 0 || int(nodeId) >= len(cluster.NodeList) {
 		panic(fmt.Sprintf("Invalid nodeid %d cluster size %d", nodeId, len(cluster.NodeList)))
 	}
-	_, node := node.RunNew(nodeId)
+
+	var multiSigs []cluster.MultiSigInfo
+	if joinMsg != nil && len(joinMsg.MultiSigInfos) > 0 {
+		multiSigs = joinMsg.MultiSigInfos
+	}
+	_, node := node.RunNew(nodeId, multiSigs)
+
 	user := viper.GetString("DGW.local_http_user")
 	pwd := viper.GetString("DGW.local_http_pwd")
 	httpsvr.StartHTTP(node, user, pwd, fmt.Sprintf(":%d", httpPort), cros)
@@ -139,7 +147,7 @@ func run(ctx *cli.Context) {
 	}
 
 	// 添加需要捕获的信号
-	if startMode != cluster.ModeWatch {
+	if startMode != cluster.ModeWatch && startMode != cluster.ModeTest {
 		signalSet.Register(syscall.SIGINT, node.LeaveCluster)
 	} else {
 		// 观察节点只用自己退出就可以了，不用发LeaveRequest

@@ -38,15 +38,6 @@ func makeAddTxsRequest(txs []*pb.Transaction) addTxsRequest {
 	return addTxsRequest{txs, make(chan []int, 1)}
 }
 
-//type txsQuery struct {
-//	txIds      []*crypto.Digest256
-//	resultChan chan []*TxQueryResult // for passing result
-//}
-//
-//func makeTxsQuery(txIds []*crypto.Digest256) txsQuery {
-//	return txsQuery{txIds, make(chan []*TxQueryResult, 1)}
-//}
-
 // TxQueryResult 保存搜索结果
 type TxQueryResult struct {
 	Tx      *pb.Transaction
@@ -186,7 +177,7 @@ func (ts *TxStore) Run(ctx context.Context) {
 		case newCommit := <-ts.newCommitChan:
 			ts.cleanUpOnNewCommitted(newCommit.txs, newCommit.height)
 		case watchedTx := <-ts.addWatchedTxChan:
-			bsLogger.Debug("add watched tx to mempool")
+			bsLogger.Debug("add watched tx to mempool", "scTxID", watchedTx.Txid)
 			ts.Lock()
 
 			wtx := &WatchedTxInfo{
@@ -214,11 +205,22 @@ func (ts *TxStore) Run(ctx context.Context) {
 			ts.Unlock()
 		case term := <-ts.newTermChan:
 			ts.currTerm = term
-			ts.updateTxTs()
 		case <-ctx.Done():
 			return
 		}
 	}
+}
+
+// HasWatchedTx 是否已经接收过tx了，是返回true，否返回false
+func (ts *TxStore) HasWatchedTx(tx *pb.WatchedTxInfo) bool {
+	if tx != nil && tx.Txid != "" {
+		ts.RLock()
+		defer ts.RUnlock()
+		_, inWatched := ts.watchedTxInfo[tx.Txid]
+		inDB := ts.HasTxInDB(tx.Txid)
+		return inWatched && inDB
+	}
+	return false
 }
 
 // OnNewBlockCommitted 新区块共识后的回调处理，需要清理内存池
@@ -248,6 +250,8 @@ func (ts *TxStore) TestAddTxs(txs []*pb.Transaction) []int {
 func (ts *TxStore) AddWatchedTx(tx *pb.WatchedTxInfo) {
 	ts.addWatchedTxChan <- tx
 }
+
+// AddFreshWatchedTx 增加新监听到的交易到待处理列表
 func (ts *TxStore) AddFreshWatchedTx(tx *pb.WatchedTxInfo) {
 	ts.RLock()
 	inMem := ts.hasTxInMemPool(tx.Txid)
@@ -330,33 +334,8 @@ func (ts *TxStore) CreateInnerTx(newlyTxId string, signMsgId string) {
 	ts.addTxsChan <- req
 }
 
-//func (ts *TxStore) QueryTxInfoById(txId *crypto.Digest256) *TxQueryResult {
-//	query := makeTxsQuery([]*crypto.Digest256{txId})
-//	ts.queryTxsChan <- query
-//	txs := <-query.resultChan
-//	return txs[0]
-//}
-//
-//func (ts *TxStore) QueryTxInfosById(txIds []*crypto.Digest256) []*TxQueryResult {
-//	query := makeTxsQuery(txIds)
-//	ts.queryTxsChan <- query
-//	return <-query.resultChan
-//}
-
 // QueryTxInfoBySidechainId 根据公链的交易id查询对应到的网关交易信息
 func (ts *TxStore) QueryTxInfoBySidechainId(scId string) *TxQueryResult {
-	//return &TxQueryResult{
-	//	Tx: &pb.Transaction{
-	//		ScTxid: "xxxxxxx",
-	//		Amount: 10000,
-	//	},
-	//	Height: 100,
-	//}
-	//txId := GetTxIdBySidechainTxId(ts.db, scId)
-	//if txId == nil {
-	//	bsLogger.Debug("get tx id failed", "sideId", scId)
-	//	return nil
-	//}
 	return ts.queryTxsInfo([]string{scId})[0]
 }
 
@@ -521,14 +500,6 @@ func (ts *TxStore) doHeartbeat() {
 
 	ts.Lock()
 	for id, txInfo := range ts.freshWatchedTxInfo {
-		/*
-			if txInfo.isOutdate() {
-				bsLogger.Error("watched tx outdate", "sctxid", id)
-				delete(ts.watchedTxInfo, id)
-				delete(ts.freshWatchedTxInfo, id)
-				continue
-			}
-		*/
 		if txInfo.isOverdue() {
 			// 由于节点之间的watcher不完全同步，也有可能是监听到这个交易之前，主节点已经广播处理了这笔交易了，所以做一下校验
 			if _, has := ts.txInfoById[id]; has {
@@ -545,8 +516,6 @@ func (ts *TxStore) doHeartbeat() {
 			watchedTxHasOverdue = true
 			// 重新设置超时时间 防止重复accuse
 			txInfo.resetWaitingTolerance()
-			// 超时之后，添加到fresh, 防止下次成为leader，而这笔交易仍然没有被执行而被彻底丢弃
-			// ts.freshWatchedTxInfo[id] = txInfo
 		}
 	}
 
@@ -566,19 +535,6 @@ func (ts *TxStore) doHeartbeat() {
 	if innerTxHasOverdue || watchedTxHasOverdue {
 		ts.TxOverdueEvent.Emit(GetNodeTerm(ts.db))
 	}
-}
-
-func (ts *TxStore) updateTxTs() {
-	/*
-		ts.Lock()
-		for _, txInfo := range ts.txInfoById {
-			txInfo.calcOverdueTs = time.Now()
-		}
-		for _, txInfo := range ts.watchedTxInfo {
-			txInfo.calcOverdueTs = time.Now()
-		}
-		ts.Unlock()
-	*/
 }
 
 // ValidateTx 验证交易的合法性

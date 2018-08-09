@@ -53,6 +53,26 @@ func TestFetch(t *testing.T) {
 	})
 }
 
-func TestInvoke(t *testing.T) {
-
+func TestSnapshot(t *testing.T) {
+	nodeInfo0 := cluster.NodeInfo{
+		Id:       0,
+		Name:     "node0",
+		Url:      "127.0.0.1:10001",
+		IsNormal: true,
+	}
+	nodeInfo1 := cluster.NodeInfo{
+		Id:       1,
+		Name:     "node1",
+		Url:      "127.0.0.1:10002",
+		IsNormal: true,
+	}
+	cluster.NodeList = []cluster.NodeInfo{nodeInfo0, nodeInfo1}
+	cluster.ClusterSize = 2
+	cluster.TotalNodeCount = 2
+	cluster.QuorumN = 1
+	cluster.AccuseQuorumN = 1
+	cluster.CreateSnapShot()
+	cluster.DeleteNode(0)
+	t.Logf("snapshot:%v,nodeList:%v", cluster.ClusterSnapshot, cluster.NodeList)
+	t.Logf("ClusterSize:%d,snapshotSize:%d", cluster.ClusterSize, cluster.ClusterSnapshot.ClusterSize)
 }

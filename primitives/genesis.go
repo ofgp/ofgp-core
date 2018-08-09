@@ -1,35 +1,18 @@
 package primitives
 
 import (
-	"dgateway/crypto"
 	pb "dgateway/proto"
 )
 
-const (
-	IsTestNet         = true
-	FederationAddress = ""
-)
-
 var (
-	GenesisBlockPack   *pb.BlockPack
-	baseBchBlockHeight int
+	// GenesisBlockPack 创世区块
+	GenesisBlockPack *pb.BlockPack
 )
 
 func init() {
-	// TODO 调用命令行从BCH节点获取当前的高度
-	baseBchBlockHeight = 100
-	baseBchBlockId := [32]byte{1}
-	baseBchPrevId := [32]byte{2}
-	baseBchBlockHeader := &pb.BchBlockHeader{
-		Height:  int32(baseBchBlockHeight),
-		BlockId: &crypto.Digest256{baseBchBlockId[:]},
-		PrevId:  &crypto.Digest256{baseBchPrevId[:]},
-	}
-
 	genesisBlock := &pb.Block{
-		TimestampMs:    0,
-		Type:           pb.Block_GENESIS,
-		BchBlockHeader: baseBchBlockHeader,
+		TimestampMs: 1534766888,
+		Type:        pb.Block_GENESIS,
 	}
 	genesisBlock.UpdateBlockId()
 

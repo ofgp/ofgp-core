@@ -139,13 +139,13 @@ func (bs *BlockStore) GetCommitByHeight(height int64) *pb.BlockPack {
 	return GetCommitByHeight(bs.db, height)
 }
 
-//根据blockhash 获取区块
+// GetBlockByID 根据blockhash 获取区块
 func (bs *BlockStore) GetBlockByID(id []byte) *pb.BlockPack {
 	return GetBlockByID(bs.db, id)
 }
 
-//根据height 区间获取区块
-func (bs *BlockStore) GetCommitsBytHeightSec(start, end int64) []*pb.BlockPack {
+// GetCommitsByHeightSec 根据height 区间获取区块
+func (bs *BlockStore) GetCommitsByHeightSec(start, end int64) []*pb.BlockPack {
 	return GetCommitsByHeightSec(bs.db, start, end)
 }
 
@@ -233,6 +233,11 @@ func (bs *BlockStore) GetETHBlockTxIndex() int {
 	return GetETHBlockTxIndex(bs.db)
 }
 
+// GetBlockByHash 根据hash获取区块
+func (bs *BlockStore) GetBlockByHash(blockID *crypto.Digest256) *pb.BlockPack {
+	return GetCommitByID(bs.db, blockID)
+}
+
 // JustCommitIt 不做校验，直接保存区块
 func (bs *BlockStore) JustCommitIt(blockPack *pb.BlockPack) {
 	mu.Lock()
@@ -241,20 +246,23 @@ func (bs *BlockStore) JustCommitIt(blockPack *pb.BlockPack) {
 }
 
 // SaveSnapshot 保存多签地址的快照和对应集群的快照
-func (bs *BlockStore) SaveSnapshot() {
-	SetMultiSigSnapshot(bs.db, cluster.MultiSigSnapshot)
-	multiSig := cluster.MultiSigSnapshot[len(cluster.MultiSigSnapshot)-1]
-	snapshot := cluster.Snapshot{
-		NodeList:       cluster.NodeList,
-		ClusterSize:    cluster.ClusterSize,
-		TotalNodeCount: cluster.TotalNodeCount,
-		QuorumN:        cluster.QuorumN,
-		AccuseQuorumN:  cluster.AccuseQuorumN,
+func (bs *BlockStore) SaveSnapshot(snapshot cluster.Snapshot) {
+	SetMultiSigSnapshot(bs.db, cluster.MultiSigSnapshot.GetMultiSigInfos())
+	multiSig, err := cluster.MultiSigSnapshot.GetLatestSigInfo()
+	if err != nil {
+		bsLogger.Debug("can't get multisig snapshot", "err", err)
+		return
 	}
 	SetClusterSnapshot(bs.db, multiSig.BchAddress, snapshot)
 	SetClusterSnapshot(bs.db, multiSig.BtcAddress, snapshot)
 }
 
+// GetMultiSigSnapshot 获取全量的多签地址快照
+func (bs *BlockStore) GetMultiSigSnapshot() []cluster.MultiSigInfo {
+	return GetMultiSigSnapshot(bs.db)
+}
+
+// GetClusterSnapshot 根据多签地址获取对应的集群快照
 func (bs *BlockStore) GetClusterSnapshot(address string) *cluster.Snapshot {
 	return GetClusterSnapshot(bs.db, address)
 }
@@ -395,10 +403,6 @@ func (bs *BlockStore) handleInitMsg(tasks *task.Queue, init *pb.InitMsg) {
 			bs.handleWrongHeightProgressMsg(tasks, init)
 			return
 		}
-		// 已经确保了initmsg的高度刚好是当前的高度+1，不用再确认fresh是否为空。因为有可能是以前的syncup导致fresh没有及时清空
-		//if GetFresh(bs.db) != nil { //has unfinished msg
-		//	return
-		//}
 
 		newFresh := pb.NewBlockPack(init)
 		bsLogger.Debug("in handle init msg, begin validate txs")
@@ -646,9 +650,6 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 				return
 			}
 			bsLogger.Debug("sign bch tx done", "sctxid", msg.WatchedTx.Txid, "newlyTxid", newlyTxId)
-			//tasks.Add(func() {
-			//	bs.SignedTxEvent.Emit(newlyTxId, msg.WatchedTx.Txid, targetChain, 0)
-			//})
 			SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
 			signResult, err := pb.MakeSignedResult(pb.CodeType_SIGNED, bs.localNodeId,
 				msg.WatchedTx.Txid, sig, targetChain, nodeTerm, bs.signer)
@@ -815,6 +816,7 @@ func updateVotie(db *dgwdb.LDBDatabase, candidate *pb.BlockPack) {
 	}
 }
 
+// CommitSyncBlock 提交同步过来的区块
 func (bs *BlockStore) CommitSyncBlock(blockPack *pb.BlockPack) error {
 	if IsCommitted(bs.db, blockPack.BlockId()) {
 		return fmt.Errorf("duplicated block id: %s", blockPack.BlockId().ToText())
@@ -1062,30 +1064,20 @@ func (bs *BlockStore) validateEthSignTx(req *pb.SignTxRequest) int {
 	if baseCheckResult != validatePass {
 		return baseCheckResult
 	}
-	// 校验input的proposal是否重复使用
-	// if IsProposalExist(bs.db, input.Proposal) {
-	// 	bsLogger.Warn("eth tx proposal already used", "proposal", input.Proposal)
-	// 	return false
-	// }
-
-	if !bs.ethWatcher.VerifyAppInfo(req.WatchedTx.From, req.WatchedTx.TokenFrom, req.WatchedTx.TokenTo) {
-		bsLogger.Warn("verify app info not passed")
-		return wrongInputOutput
-	}
 
 	// 暂时只支持充值到一个地址
 	if len(req.WatchedTx.RechargeList) != 1 {
 		bsLogger.Warn("the count of output to eth is grater than 1")
 		return wrongInputOutput
 	}
-
+	addredss := ew.HexToAddress(req.WatchedTx.RechargeList[0].Address)
 	localInput, _ := bs.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, req.WatchedTx.TokenTo, uint64(req.WatchedTx.RechargeList[0].Amount),
-		req.WatchedTx.RechargeList[0].Address, req.WatchedTx.Txid)
+		addredss, req.WatchedTx.Txid)
 	if !bytes.Equal(req.NewlyTx.Data, localInput) {
 		bsLogger.Warn("verify eth input not passed", "sctxid", req.WatchedTx.Txid)
 		return wrongInputOutput
 	}
-	return wrongInputOutput
+	return validatePass
 }
 
 func (bs *BlockStore) baseCheck(req *pb.SignTxRequest) int {
@@ -1125,7 +1117,7 @@ func (bs *BlockStore) validateWatchedTx(tx *pb.WatchedTxInfo) bool {
 			}
 			newTx = pb.BtcToPbTx(chainTx.SubTx)
 		} else if tx.From == "eth" {
-			chainTx, err := bs.ethWatcher.GetTxByHash(tx.Txid)
+			chainTx, err := bs.ethWatcher.GetEventByHash(tx.Txid)
 			if err != nil {
 				return false
 			}
@@ -1162,44 +1154,4 @@ func (bs *BlockStore) checkReconfigBlock(blockPack *pb.BlockPack) bool {
 		msg := GetLeaveNodeInfo(bs.db)
 		return msg != nil && msg.NodeId == reconfig.NodeId
 	}
-}
-func (bs *BlockStore) GetBlockByHash(blockID *crypto.Digest256) *pb.BlockPack {
-	return GetCommitByID(bs.db, blockID)
-}
-
-func genSyncUpByHashResponse(db *dgwdb.LDBDatabase, blockIDs []*crypto.Digest256,
-	maxBlockN int64, needFresh bool) (*pb.SyncUpResponse, error) {
-	res := new(pb.SyncUpResponse)
-	var blockPack *pb.BlockPack
-	for _, blockID := range blockIDs {
-		blockPack = GetCommitByID(db, blockID)
-		if blockPack != nil {
-			break
-		}
-	}
-	if blockPack == nil {
-		return nil, errors.New("there's no same parent")
-	}
-	commitHeight := GetCommitHeight(db)
-	curHeight := blockPack.Height()
-	for h := curHeight + 1; h <= commitHeight && h-curHeight <= maxBlockN; h++ {
-		blockPack := GetCommitByHeight(db, h)
-		res.Commits = append(res.Commits, blockPack)
-	}
-	res.More = (commitHeight-curHeight > maxBlockN)
-	if !res.More && needFresh {
-		res.Fresh = GetFresh(db)
-		res.StrongAccuse = GetLastTermAccuse(db)
-	}
-
-	return res, nil
-}
-
-func (bs *BlockStore) GenSyncUpByHashResponse(locator []*crypto.Digest256, maxBlockN int64, needFresh bool) (*pb.SyncUpResponse, error) {
-	res, err := genSyncUpByHashResponse(bs.db, locator, maxBlockN, needFresh)
-	return res, err
-}
-
-func (bs *BlockStore) DelSignMsg(msgID string) {
-	DelSignMsg(bs.db, msgID)
 }

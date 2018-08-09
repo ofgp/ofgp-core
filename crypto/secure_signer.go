@@ -54,7 +54,24 @@ func NewSecureSigner(pubkeyHex, pubkeyHash string) *SecureSigner {
 	}
 }
 
-// InitKeystorePrivKey 初始化访问keystore需要的私钥，仅需调用一次
+var client *http.Client
+
+func init() {
+	client = &http.Client{
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   800 * time.Millisecond,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+			MaxIdleConns:        100,
+			MaxIdleConnsPerHost: 100,
+			IdleConnTimeout:     90 * time.Second,
+		},
+		Timeout: 1000 * time.Millisecond,
+	}
+}
+
+// InitKeystoreParam 初始化访问keystore需要的私钥，仅需调用一次
 func (signer *SecureSigner) InitKeystoreParam(ksPrivKey string, serviceId string, url string) {
 	signer.ksSigner = SignerFromText(ksPrivKey)
 	signer.KsPrivKey = ksPrivKey
@@ -75,22 +92,6 @@ func (signer *SecureSigner) Sign(digest []byte) ([]byte, error) {
 	return hex.DecodeString(sig.Data.SignatureDerHex)
 }
 
-var client *http.Client
-
-func init() {
-	client = &http.Client{
-		Transport: &http.Transport{
-			DialContext: (&net.Dialer{
-				Timeout:   800 * time.Millisecond,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			MaxIdleConns:        100,
-			MaxIdleConnsPerHost: 100,
-			IdleConnTimeout:     90 * time.Second,
-		},
-		Timeout: 1000 * time.Millisecond,
-	}
-}
 func createReq(url string, jsonBody []byte, headerData, serviceID string) *http.Request {
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonBody))
 	if err != nil {
@@ -103,6 +104,7 @@ func createReq(url string, jsonBody []byte, headerData, serviceID string) *http.
 	req.Close = true
 	return req
 }
+
 func dialKeyStore(digest []byte, ksSigner *Signer, serviceId string, url string, pubkeyHash string) (*signResponse, error) {
 	data := hex.EncodeToString(digest)
 	body := signBody{

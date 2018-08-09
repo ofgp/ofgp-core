@@ -112,9 +112,9 @@ func (sd *SyncDaemon) doSyncUp(nodeId int32) error {
 			return err
 		}
 		if startMode != cluster.ModeWatch {
-			err = sd.processSyncUpResponse(rsp)
+			err = sd.processSyncUpResponse(rsp, cluster.AccuseQuorumN)
 		} else {
-			err = sd.processSimpleSyncUpResponse(rsp)
+			err = sd.processSimpleSyncUpResponse(rsp, cluster.AccuseQuorumN)
 		}
 		if err != nil {
 			return err
@@ -156,7 +156,8 @@ func (sd *SyncDaemon) doJoinSyncUp(nodeId int32) error {
 			sdLogger.Error(err.Error())
 			return err
 		}
-		err = sd.processSimpleSyncUpResponse(rsp)
+		//使用待加入集群的accuseQuorumN check
+		err = sd.processSimpleSyncUpResponse(rsp, cluster.ClusterSnapshot.AccuseQuorumN)
 		if err != nil {
 			return err
 		}
@@ -168,7 +169,7 @@ func (sd *SyncDaemon) doJoinSyncUp(nodeId int32) error {
 }
 
 //checkblock 是否合法
-func (sd *SyncDaemon) checkBlockPack(blockPack *pb.BlockPack) bool {
+func (sd *SyncDaemon) checkBlockPack(blockPack *pb.BlockPack, accuseQuorumN int) bool {
 	if blockPack == nil || blockPack.Block() == nil {
 		sdLogger.Error("get blockPack nil")
 		return false
@@ -210,16 +211,16 @@ func (sd *SyncDaemon) checkBlockPack(blockPack *pb.BlockPack) bool {
 	}
 	//check 多数派证明
 	cnt := sd.peerManager.GetCommitedCnt(blockPack.BlockId())
-	if cnt < cluster.AccuseQuorumN {
+	if cnt < accuseQuorumN {
 		sdLogger.Error("block is not commited in accuseQuorum", "cmmitedCnt", cnt)
 		return false
 	}
 	return true
 }
-func (sd *SyncDaemon) processSyncUpResponse(rsp *pb.SyncUpResponse) error {
+func (sd *SyncDaemon) processSyncUpResponse(rsp *pb.SyncUpResponse, accuseQuorumN int) error {
 	bs := sd.blockStore
 	for _, block := range rsp.Commits {
-		if !sd.checkBlockPack(block) {
+		if !sd.checkBlockPack(block, accuseQuorumN) {
 			break
 		}
 		bs.JustCommitIt(block)
@@ -245,10 +246,10 @@ func (sd *SyncDaemon) processSyncUpResponse(rsp *pb.SyncUpResponse) error {
 }
 
 // processSimpleSyncUpResponse 同步数据不参与共识
-func (sd *SyncDaemon) processSimpleSyncUpResponse(rsp *pb.SyncUpResponse) error {
+func (sd *SyncDaemon) processSimpleSyncUpResponse(rsp *pb.SyncUpResponse, accuseQuorumN int) error {
 	bs := sd.blockStore
 	for _, block := range rsp.Commits {
-		if !sd.checkBlockPack(block) {
+		if !sd.checkBlockPack(block, accuseQuorumN) {
 			sdLogger.Error("check block not pass")
 			break
 		}

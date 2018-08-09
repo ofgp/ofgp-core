@@ -105,10 +105,10 @@ func TestMultiSig(t *testing.T) {
 		t.Fatal("multisig not equal")
 	}
 	cluster.AddMultiSigInfo(cluster.CurrMultiSig)
-	if len(cluster.MultiSigSnapshot) != 1 {
+	if len(cluster.MultiSigSnapshot.SigInfos) != 1 {
 		t.Fatal("add multisig failed")
 	}
-	if !sig1.Equal(cluster.MultiSigSnapshot[0]) {
+	if !sig1.Equal(cluster.MultiSigSnapshot.SigInfos[0]) {
 		t.Fatal("multisig not equal")
 	}
 	sig2 := cluster.MultiSigInfo{
@@ -122,10 +122,12 @@ func TestMultiSig(t *testing.T) {
 		t.Fatal("multisig not equal")
 	}
 	cluster.AddMultiSigInfo(cluster.CurrMultiSig)
-	if len(cluster.MultiSigSnapshot) != 2 {
+	if len(cluster.MultiSigSnapshot.SigInfos) != 2 {
 		t.Fatal("add multisig failed")
 	}
-	if !sig1.Equal(cluster.MultiSigSnapshot[0]) || !sig2.Equal(cluster.MultiSigSnapshot[1]) {
+	if !sig1.Equal(cluster.MultiSigSnapshot.SigInfos[0]) || !sig2.Equal(cluster.MultiSigSnapshot.SigInfos[1]) {
 		t.Fatal("multisig not equal")
 	}
+	latest, _ := cluster.MultiSigSnapshot.GetLatestSigInfo()
+	t.Logf("latestInfo:%s", latest)
 }

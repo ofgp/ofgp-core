@@ -7,6 +7,7 @@ import (
 	"dgateway/primitives"
 	pb "dgateway/proto"
 	"encoding/hex"
+	"errors"
 	ew "ethWatcher"
 	"fmt"
 	"sort"
@@ -37,8 +38,14 @@ func (node *BraftNode) GetTxBySidechainTxId(scTxId string) *primitives.TxQueryRe
 	return node.txStore.QueryTxInfoBySidechainId(scTxId)
 }
 
-func (node *BraftNode) AddWatchedTx(tx *pb.WatchedTxInfo) {
-	node.txStore.AddWatchedTx(tx)
+// AddWatchedTx 手动添加交易
+func (node *BraftNode) AddWatchedTx(tx *pb.WatchedTxInfo) error {
+	if !node.txStore.HasWatchedTx(tx) {
+		node.txStore.AddWatchedTx(tx)
+	} else {
+		return errors.New("tx already exist")
+	}
+	return nil
 }
 
 //blcokView for api
@@ -68,6 +75,8 @@ type TxView struct {
 	FromFee     int64    `json:"from_fee"`
 	DGWFee      int64    `json:"dgw_fee"`
 	ToFee       int64    `json:"to_fee"`
+	TokenCode   uint32   `json:"token_code"`
+	AppCode     uint32   `json:"app_code"`
 }
 
 func getHexString(digest *crypto.Digest256) string {
@@ -92,6 +101,12 @@ func (node *BraftNode) createTxView(blockID string, height int64, tx *pb.Transac
 	for _, addr := range addrList {
 		addrs = append(addrs, addr.Address)
 	}
+	var tokenCode, appCode uint32
+	if watchedTx.From == "eth" { //熔币
+		tokenCode, appCode = watchedTx.TokenTo, watchedTx.TokenFrom
+	} else { //铸币
+		tokenCode, appCode = watchedTx.TokenFrom, watchedTx.TokenTo
+	}
 	txView := &TxView{
 		FromTxHash:  watchedTx.GetTxid(),
 		DGWTxHash:   getHexString(tx.GetId()),
@@ -104,6 +119,8 @@ func (node *BraftNode) createTxView(blockID string, height int64, tx *pb.Transac
 		FromFee:     watchedTx.GetFee(),
 		ToAddrs:     addrs,
 		Time:        tx.Time,
+		TokenCode:   tokenCode,
+		AppCode:     appCode,
 	}
 	return txView
 }
@@ -174,7 +191,7 @@ func (node *BraftNode) GetBlocks(start, end int64) []*BlockView {
 		start = start - 1
 	}
 
-	blockPacks := node.blockStore.GetCommitsBytHeightSec(start, end)
+	blockPacks := node.blockStore.GetCommitsByHeightSec(start, end)
 	size := len(blockPacks)
 	if size == 0 {
 		return nil

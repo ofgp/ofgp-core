@@ -188,7 +188,17 @@ func (bn *BraftNode) GetClusterNodes(ctx context.Context, msg *pb.Void) (*pb.Nod
 			IsNormal: node.IsNormal,
 		})
 	}
-
+	//设置当前quorumN
+	rst.QuorumN = int32(cluster.QuorumN)
+	oldMultisigs := bn.blockStore.GetMultiSigSnapshot()
+	for _, multiSig := range oldMultisigs {
+		rst.MultiSigInfoList = append(rst.MultiSigInfoList, &pb.MultiSigInfo{
+			BtcAddress:      multiSig.BtcAddress,
+			BtcRedeemScript: multiSig.BtcRedeemScript,
+			BchAddress:      multiSig.BchAddress,
+			BchRedeemScript: multiSig.BchRedeemScript,
+		})
+	}
 	return rst, nil
 }
 
@@ -204,7 +214,6 @@ func (bn *BraftNode) IsCommited(ctx context.Context, msg *crypto.Digest256) (*pb
 	return res, nil
 }
 
-//TODO 获取watched height
 func (bn *BraftNode) GetNodeRuntimeInfo(ctx context.Context, msg *pb.Void) (*pb.NodeRuntimeInfo, error) {
 	nodeLogger.Debug("Received GetNodeRuntimeInfo")
 	btchHeight := bn.btcWatcher.GetBlockNumber()

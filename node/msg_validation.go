@@ -166,7 +166,6 @@ func checkVotie(v *pb.Votie) bool {
 	}
 
 	if v.Height == 0 {
-		// TODO: 暂时没有比较创世区块id
 		return v.Term == 0 && len(v.Prepares) == 0 && len(v.Commits) == 0
 	}
 	return len(v.Prepares) >= cluster.QuorumN || len(v.Commits) >= cluster.QuorumN
@@ -333,12 +332,6 @@ func checkSyncUpResponse(msg *pb.SyncUpResponse) bool {
 			prevHeight = commit.Height()
 			prevTerm = commit.Term()
 			prevBlockId = commit.BlockId()
-
-			// TODO 这里暂时把更多的检查去掉了
-			//if checkMode == CheckFull && len(commit.Commits) < cluster.QuorumN {
-			//	nodeLogger.Error("bbbbbbbb")
-			//	return false
-			//}
 		}
 	}
 
@@ -388,7 +381,7 @@ func checkJoinVote(vote *pb.Vote, pubkey []byte) bool {
 
 func checkJoinRequest(req *pb.JoinRequest, host string, pubkeyHex string) bool {
 	if req == nil || !checkHost(req.Host) || req.Host != host || req.Pubkey != pubkeyHex {
-		nodeLogger.Debug("check joinrequest failed", "host", req.Host)
+		nodeLogger.Debug("check joinrequest failed", "req_host", req.Host, "host", host, "req_pubkey", req.Pubkey, "pubkey", pubkeyHex)
 		return false
 	}
 	if req.GetVote() == nil || req.GetVote().GetVotie() == nil {

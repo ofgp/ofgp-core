@@ -291,10 +291,17 @@ message NodeInfo {
     string host = 4;
     bool is_normal = 5;
 }
-
+message MultiSigInfo {
+    string btc_address = 1;
+    bytes btc_redeem_script = 2;
+    string bch_address = 3;
+    bytes bch_redeem_script = 4;
+}
 message NodeList {
     repeated NodeInfo node_list = 1;
-    int32 leader_id = 2;
+    repeated MultiSigInfo multi_sig_info_list = 2;
+    int32 leader_id = 3;
+    int32 quorum_n = 4;
 }
 
 message AccuseRecord {

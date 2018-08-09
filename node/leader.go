@@ -337,8 +337,9 @@ func (ld *Leader) watchFormerMultisig(ctx context.Context) {
 		select {
 		case <-tick:
 			leaderLogger.Debug("begin watch former multisig")
+			cluster.MultiSigSnapshot.Lock()
 		JLoop:
-			for _, multiSig := range cluster.MultiSigSnapshot {
+			for _, multiSig := range cluster.MultiSigSnapshot.SigInfos {
 				if ld.isInCharge() {
 					leaderLogger.Debug("watcher former multisig", "bchaddress", multiSig.BchAddress, "btcaddress", multiSig.BtcAddress)
 					addressMap := make(map[string]string)
@@ -381,6 +382,7 @@ func (ld *Leader) watchFormerMultisig(ctx context.Context) {
 					break
 				}
 			}
+			cluster.MultiSigSnapshot.Unlock()
 		case <-ctx.Done():
 			return
 		}
@@ -445,6 +447,7 @@ func (ld *Leader) createTransaction(ctx context.Context) {
 
 func (ld *Leader) createTransferTx(watcher *btcwatcher.MortgageWatcher, address string,
 	snapshot *cluster.Snapshot) *pb.NewlyTx {
+	leaderLogger.Debug("transfer param", "quorum", snapshot.QuorumN, "clusterSize", snapshot.ClusterSize)
 	newlyTx := watcher.TransferAsset(address, snapshot.QuorumN, snapshot.ClusterSize)
 	if newlyTx == nil {
 		return nil
@@ -473,6 +476,7 @@ func (ld *Leader) createBtcTx(watchedTx *pb.WatchedTxInfo, chainType string) *pb
 			Address: a.Address,
 		})
 	}
+	leaderLogger.Debug("rechargelist", "sctxid", watchedTx.Txid, "addrs", watcherAddressInfo)
 	newlyTx, ok := watcher.CreateCoinTx(watcherAddressInfo, watchedTx.Fee, watchedTx.Txid)
 	if ok != 0 {
 		leaderLogger.Error("create new chan tx failed", "errcode", ok, "sctxid", watchedTx.Txid)
@@ -492,8 +496,9 @@ func (ld *Leader) createBtcTx(watchedTx *pb.WatchedTxInfo, chainType string) *pb
 func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 	//input, err := ld.ethWatcher.EncodeMint(watchedTx.From, uint64(watchedTx.RechargeList[0].Amount),
 	// 	watchedTx.RechargeList[0].Address, watchedTx.Txid+strconv.FormatInt(util.NowMs(), 10))
+	addredss := ew.HexToAddress(watchedTx.RechargeList[0].Address)
 	input, err := ld.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, watchedTx.TokenTo, uint64(watchedTx.RechargeList[0].Amount),
-		watchedTx.RechargeList[0].Address, watchedTx.Txid)
+		addredss, watchedTx.Txid)
 	if err != nil {
 		leaderLogger.Error("create eth input failed", "err", err, "sctxid", watchedTx.Txid)
 		return nil
@@ -510,6 +515,8 @@ func (ld *Leader) broadcastSign(msg *pb.SignTxRequest, nodes []cluster.NodeInfo,
 		availableCnt = ld.pm.GetTxConnAvailableCnt(nodes)
 	}
 	for _, node := range nodes {
-		go ld.pm.NotifySignTx(node.Id, msg)
+		if node.IsNormal {
+			go ld.pm.NotifySignTx(node.Id, msg)
+		}
 	}
 }

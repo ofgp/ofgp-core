@@ -106,7 +106,7 @@ func (node *BraftNode) sendTxToChain(newlyTx *wire.MsgTx, watcher *btcwatcher.Mo
 	if err != nil {
 		leaderLogger.Error("send signed tx to bch failed", "err", err, "sctxid", signResult.TxId)
 	}
-	node.blockStore.SignedTxEvent.Emit(newlyTxHash, signResult.TxId, signResult.To, 0)
+	node.blockStore.SignedTxEvent.Emit(newlyTxHash, signResult.TxId, signResult.To, signReq.WatchedTx.TokenTo)
 }
 
 func (node *BraftNode) doSave(msg *pb.SignedResult) {
@@ -251,7 +251,7 @@ func (node *BraftNode) checkSignTimeout() {
 			if signReq == nil { //本地尚未签名
 				return true
 			}
-			node.blockStore.DelSignMsg(scTxID)
+			node.blockStore.DeleteSignReqMsg(scTxID)
 
 			if !signReq.WatchedTx.IsTransferTx() {
 				if !node.hasTxInWaitting(scTxID) { //如果签名已经共识

@@ -216,6 +216,10 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 
 		signedResultChan: make(chan *pb.SignedResult),
 	}
+	//重新添加监听列表
+	if len(multiSigList) > 0 {
+		bn.changeFederationAddrs(multiSig, multiSigList)
+	}
 
 	bs.NeedSyncUpEvent.Subscribe(func(nodeId int32) {
 		nodeLogger.Debug("Need Syncup", "from", nodeId)
@@ -325,7 +329,8 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 		bs.DeleteJoinNodeInfo()
 		ld.OnNodeJoinedDone(vote)
 		cluster.AddMultiSigInfo(cluster.CurrMultiSig)
-		bs.SaveSnapshot()
+		snapShot := cluster.GetSnapshot()
+		bs.SaveSnapshot(snapShot)
 		for {
 			// 确保老的交易都已经处理完毕
 			if ts.HasFreshWatchedTx() || ld.hasTxToSign {
@@ -343,7 +348,8 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 
 		// 调用ETH的网关合约接口，增加合约成员
 		address, _, _ := ew.GetAddressFromPub(pubkey)
-		_, err := ethWatcher.GatewayTransaction(signer.PubKeyHex, signer.PubkeyHash, ew.VOTE_METHOD_ADDVOTER, address, "J_"+pubkey)
+		proposal := "J_" + host + pubkey
+		_, err := ethWatcher.GatewayTransaction(signer.PubKeyHex, signer.PubkeyHash, ew.VOTE_METHOD_ADDVOTER, address, proposal)
 		if err != nil {
 			nodeLogger.Error("add voter to contract failed", "err", err)
 		}
@@ -359,22 +365,57 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 	})
 
 	bs.OnLeaveEvent.Subscribe(func(nodeId int32) {
+		//删除之前创建集群snapshot
+		cluster.CreateSnapShot()
 		cluster.DeleteNode(nodeId)
 		ld.OnNodeLeave(nodeId)
 	})
 
 	bs.LeavedEvent.Subscribe(func(nodeId int32) {
+
+		bs.DeleteLeaveNodeInfo()
+		ld.OnNodeLeaveDone()
+		//将当前多签地址加入监听列表
+		cluster.AddMultiSigInfo(cluster.CurrMultiSig)
+		//节点离开标记节点不可用
+		snapshot := cluster.ClusterSnapshot
+		if snapshot == nil { //没有接收到leave请求
+			nodeLogger.Debug("leave snapshot not found", "leavingNodeId", ld.leavingNodeId)
+			snapshot = cluster.CreateSnapShot()
+		}
+		if int(nodeId) < len(snapshot.NodeList) {
+			snapshot.NodeList[nodeId].IsNormal = false
+			bs.SaveSnapshot(*snapshot)
+		} else {
+			nodeLogger.Debug("leave nodeId wrong", "nodeId", nodeId, "size", len(snapshot.NodeList))
+		}
+
+		for {
+			// 确保老的交易都已经处理完毕
+			if ts.HasFreshWatchedTx() || ld.hasTxToSign {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+			break
+		}
+		// 为了防止有节点没有收到LeaveRequest，共识成功后再做一次删除操作
+		cluster.DeleteNode(nodeId)
+		cluster.DelSnapShot()
 		// 调用ETH的网关合约接口，删掉合约成员
 		pubkey := hex.EncodeToString(cluster.NodeList[nodeId].PublicKey)
 		address, _, _ := ew.GetAddressFromPub(pubkey)
-		_, err := ethWatcher.GatewayTransaction(signer.PubKeyHex, signer.PubkeyHash, ew.VOTE_METHOD_REMOVEVOTER, address, "L_"+pubkey)
+		proposal := "L_" + cluster.NodeList[nodeId].Url + pubkey
+		_, err := ethWatcher.GatewayTransaction(signer.PubKeyHex, signer.PubkeyHash, ew.VOTE_METHOD_REMOVEVOTER, address, proposal)
 		if err != nil {
 			nodeLogger.Error("remove voter from contract failed", "err", err)
 		}
-		bs.DeleteLeaveNodeInfo()
-		// 为了防止有节点没有收到LeaveRequest，共识成功后再做一次删除操作
-		cluster.DeleteNode(nodeId)
-		ld.OnNodeLeaveDone()
+		//节点离开修改多签地址
+		multiSig := getFederationAddress()
+		nodeLogger.Debug("leave new multisig address", "btc", multiSig.BtcAddress, "bch", multiSig.BchAddress)
+		btcWatcher.ChangeFederationAddress(multiSig.BtcAddress, multiSig.BtcRedeemScript)
+		bchWatcher.ChangeFederationAddress(multiSig.BchAddress, multiSig.BchRedeemScript)
+		cluster.SetCurrMultiSig(multiSig)
+
 		saveNewConfig(nodeId)
 	})
 
@@ -539,6 +580,14 @@ func (bn *BraftNode) regularSyncUp(ctx context.Context) {
 	}
 }
 
+func (bn *BraftNode) checkSubTx(tx *btcwatcher.SubTransaction) bool {
+	if !bn.ethWatcher.VerifyAppInfo(tx.From, tx.TokenFrom, tx.TokenTo) {
+		nodeLogger.Warn("verify app info not passed", "scTxid", tx.ScTxid)
+		return false
+	}
+	return true
+}
+
 // 后面可能会改成每条链一个goroutine，如果每条链的交易量都很大，一个select可能处理不过来
 func (bn *BraftNode) watchNewTx(ctx context.Context) {
 	bn.bchWatcher.StartWatch()
@@ -566,9 +615,15 @@ func (bn *BraftNode) watchNewTx(ctx context.Context) {
 		select {
 		case tx := <-bchTxChan:
 			nodeLogger.Debug("receive bch tx", "tx", tx)
+			if !bn.checkSubTx(tx) {
+				continue
+			}
 			watchedTx = pb.BtcToPbTx(tx)
 		case tx := <-btcTxChan:
 			nodeLogger.Debug("receive btc tx", "tx", tx)
+			if !bn.checkSubTx(tx) {
+				continue
+			}
 			watchedTx = pb.BtcToPbTx(tx)
 		case ev := <-ethEventChan:
 			bn.dealEthEvent(ev)
@@ -583,21 +638,25 @@ func (bn *BraftNode) watchNewTx(ctx context.Context) {
 
 func (bn *BraftNode) dealEthEvent(ev *ew.PushEvent) {
 	switch ev.Method {
-	case ew.VOTE_METHOD_BURN:
+	case ew.TOKEN_METHOD_BURN:
 		// 熔币事件
 		burnData := ev.ExtraData.(*ew.ExtraBurnData)
+		nodeLogger.Debug("receive eth burn", "tx", burnData.ScTxid)
 		watchedTx := pb.EthToPbTx(burnData)
 		if watchedTx != nil {
 			bn.txStore.AddWatchedTx(watchedTx)
+		} else {
+			nodeLogger.Debug("create watchedTx fail", "tx", burnData.ScTxid)
 		}
 	case ew.VOTE_METHOD_MINT:
 		// 铸币结果通知事件
 		if (ev.Events & ew.VOTE_TX_MINT) == 0 {
+			// nodeLogger.Debug("receive eth vote", "tx", ev.Tx.TxHash.Hex())
 			return
 		}
 		mintData := ev.ExtraData.(*ew.ExtraMintData)
+		nodeLogger.Debug("receive eth create", "tx", ev.Tx.TxHash.Hex())
 		go func(scTxId string) {
-			// TODO 拿到对应的铸币交易，去confirm列表里面标记为已成功
 			bn.mu.Lock()
 			bn.txStore.CreateInnerTx(ev.Tx.TxHash.Hex(), scTxId)
 			delete(bn.waitingConfirmTxs, mintData.Proposal)
@@ -807,19 +866,63 @@ func getRemoteClusterNodes(host string) *pb.NodeList {
 	return nodeList
 }
 
-// InitJoin 根据引导节点做集群配置信息的初始化
-func InitJoin() int32 {
-	initHost := viper.GetString("DGW.init_node_host")
-	if len(initHost) == 0 {
-		return -1
+// getFederationAddressUsePubkeys 根据pubkey获取多签地址
+func getFederationAddressUsePubkeys(pubKeys []string, quorumN int) cluster.MultiSigInfo {
+	btcFedAddress, btcRedeem, err := coinmanager.GetMultiSigAddress(pubKeys, quorumN, "btc")
+	assert.ErrorIsNil(err)
+	bchFedAddress, bchRedeem, err := coinmanager.GetMultiSigAddress(pubKeys, quorumN, "bch")
+	assert.ErrorIsNil(err)
+	multiSig := cluster.MultiSigInfo{
+		BtcAddress:      btcFedAddress,
+		BtcRedeemScript: btcRedeem,
+		BchAddress:      bchFedAddress,
+		BchRedeemScript: bchRedeem,
 	}
+	return multiSig
+}
+
+type JoinMsg struct {
+	LocalID       int32
+	MultiSigInfos []cluster.MultiSigInfo
+}
+
+// InitJoin 根据引导节点做集群配置信息的初始化
+func InitJoin() *JoinMsg {
+	initHost := viper.GetString("DGW.init_node_host")
+	joinMsg := new(JoinMsg)
+	if len(initHost) == 0 {
+		joinMsg.LocalID = -1
+		return joinMsg
+	}
+
 	nodeList := getRemoteClusterNodes(initHost)
+
+	//引导节点snapshot multiSig
+	for _, multiSig := range nodeList.MultiSigInfoList {
+		joinMsg.MultiSigInfos = append(joinMsg.MultiSigInfos, cluster.MultiSigInfo{
+			BtcAddress:      multiSig.BtcAddress,
+			BtcRedeemScript: multiSig.BtcRedeemScript,
+			BchAddress:      multiSig.BchAddress,
+			BchRedeemScript: multiSig.BchRedeemScript,
+		})
+	}
+
+	//待加入集群的multisig
+	multiSig := getFederationAddressUsePubkeys(nodeList.GetPubkeys(), int(nodeList.QuorumN))
+	joinMsg.MultiSigInfos = append(joinMsg.MultiSigInfos, multiSig)
+
+	nodeLogger.Debug("init join get multisig address", "btc", multiSig.BtcAddress, "bch", multiSig.BchAddress)
 	cluster.InitWithNodeList(nodeList)
+
+	//创建当前集群的快照
+	cluster.CreateSnapShot()
+
 	cluster.AddNode(viper.GetString("DGW.local_host"), int32(len(nodeList.NodeList)), viper.GetString("DGW.local_pubkey"),
 		viper.GetString("KEYSTORE.local_pubkey_hash"))
-	localId := int32(len(nodeList.NodeList))
-	saveNewConfig(localId)
-	return localId
+	localID := int32(len(nodeList.NodeList))
+	saveNewConfig(localID)
+	joinMsg.LocalID = localID
+	return joinMsg
 }
 
 // saveNewConfig 保存最新的配置信息到viper，以及持久化到配置文件
@@ -899,7 +1002,7 @@ func (bn *BraftNode) createJoinReq(host, pubkey string, signer *crypto.SecureSig
 func (bn *BraftNode) syncBeforeSendJoinReq(localID int32) {
 	var syncedCnt int
 	finished := make(map[int32]struct{})
-	for syncedCnt < cluster.QuorumN {
+	for syncedCnt < cluster.ClusterSnapshot.QuorumN {
 		for _, node := range cluster.NodeList {
 			if node.Id != localID {
 				if _, ok := finished[node.Id]; !ok {
@@ -923,11 +1026,10 @@ func (bn *BraftNode) sendJoinCheckSyncedRequest() {
 	var syncedCnt int
 	syncedNode := make(map[int32]struct{})
 
-	for syncedCnt < cluster.QuorumN {
+	for syncedCnt < cluster.ClusterSnapshot.QuorumN {
 		for _, nodeInfo := range cluster.NodeList {
 			if nodeInfo.Id == bn.localNodeInfo.Id {
-				nodeLogger.Error("this node is already in nodelist")
-				return
+				continue
 			}
 			if !nodeInfo.IsNormal {
 				nodeLogger.Warn("node is not normal", "node", nodeInfo)
@@ -965,7 +1067,7 @@ func (bn *BraftNode) sendJoinCheckSyncedRequest() {
 				continue
 			}
 			if !joinRes.Synced { //未同步完成
-				err := bn.syncDaemon.doSyncUp(joinRes.NodeID)
+				err := bn.syncDaemon.doJoinSyncUp(joinRes.NodeID)
 				if err != nil {
 					nodeLogger.Error("sync form host err", "host", host, "err", err)
 					continue
@@ -978,6 +1080,7 @@ func (bn *BraftNode) sendJoinCheckSyncedRequest() {
 		}
 		time.Sleep(time.Second)
 	}
+	nodeLogger.Info("sync suc")
 }
 
 func checkJoinSuccess() bool {
@@ -995,8 +1098,25 @@ func checkJoinSuccess() bool {
 	return false
 }
 
+//添加多签地址和redmeScript
+func (bn *BraftNode) changeFederationAddrs(latest cluster.MultiSigInfo, multiSigs []cluster.MultiSigInfo) {
+	if len(multiSigs) > 0 {
+		for _, multiSig := range multiSigs {
+			nodeLogger.Debug("init old multisig address", "btc", multiSig.BtcAddress, "bch", multiSig.BchAddress)
+			bn.btcWatcher.ChangeFederationAddress(multiSig.BtcAddress, multiSig.BtcRedeemScript)
+			bn.bchWatcher.ChangeFederationAddress(multiSig.BchAddress, multiSig.BchRedeemScript)
+		}
+	}
+	//设置最新的multiSig
+	if latest.BchAddress != "" && latest.BtcAddress != "" {
+		nodeLogger.Debug("init latest multisig address", "btc", latest.BtcAddress, "bch", latest.BchAddress)
+		bn.btcWatcher.ChangeFederationAddress(latest.BtcAddress, latest.BtcRedeemScript)
+		bn.bchWatcher.ChangeFederationAddress(latest.BchAddress, latest.BchRedeemScript)
+	}
+}
+
 // RunNew 启动server
-func RunNew(id int32) (*grpc.Server, *BraftNode) {
+func RunNew(id int32, multiSigInfos []cluster.MultiSigInfo) (*grpc.Server, *BraftNode) {
 	startMode = viper.GetInt("DGW.start_mode")
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", viper.Get("DGW.local_p2p_port")))
 	if err != nil {
@@ -1020,6 +1140,13 @@ func RunNew(id int32) (*grpc.Server, *BraftNode) {
 		if !checkJoinSuccess() {
 			panic("join cluster failed")
 		}
+		cluster.SetMultiSigSnapshot(multiSigInfos)
+		braftNode.blockStore.SaveSnapshot(*cluster.ClusterSnapshot)
+
+		latestMultiSig := getFederationAddress()
+
+		cluster.SetCurrMultiSig(latestMultiSig)
+		braftNode.changeFederationAddrs(latestMultiSig, multiSigInfos)
 	}
 	braftNode.Run()
 

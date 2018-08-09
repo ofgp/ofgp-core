@@ -6,6 +6,7 @@ import (
 	"dgateway/util/assert"
 	"dgateway/util/sort"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -579,7 +580,6 @@ func feedBlockFields(hasher *crypto.Hasher256, fieldName string, block *Block) {
 
 		switch block.Type {
 		case Block_GENESIS:
-			util.FeedDigestField(hs, "BchBlockHeader", block.BchBlockHeader.Id())
 		case Block_TXS:
 			util.FeedField(hs, "TxIds", func(h *crypto.Hasher256) {
 				for _, tx := range block.Txs {
@@ -894,10 +894,12 @@ func BtcToPbTx(tx *btcwatcher.SubTransaction) *WatchedTxInfo {
 // EthToPbTx ETH链监听到的交易转pb结构。
 func EthToPbTx(tx *ethwatcher.ExtraBurnData) *WatchedTxInfo {
 	if tx.Amount <= 0 || tx.Fee < 0 || tx.Amount <= tx.Fee {
+		log.Printf("tx amount fee is not right tx:%s", tx.ScTxid)
 		return nil
 	}
 
 	if len(tx.RechargeList) == 0 {
+		log.Printf("tx recharge list is empty tx:%s", tx.ScTxid)
 		return nil
 	}
 
@@ -911,6 +913,7 @@ func EthToPbTx(tx *ethwatcher.ExtraBurnData) *WatchedTxInfo {
 	leftAmount := tx.Amount - tx.Fee
 	for _, addressInfo := range tx.RechargeList {
 		if addressInfo.Amount <= 0 {
+			log.Printf("addrres:%s amount is <=0 tx:%s", addressInfo.Address, tx.ScTxid)
 			return nil
 		}
 		amount := addressInfo.Amount
@@ -1041,4 +1044,14 @@ func (msg *LeaveRequest) Id() *crypto.Digest256 {
 	hasher := crypto.NewHasher256()
 	feedLeaveRequestFields(hasher, "LeaveRequest", msg)
 	return hasher.Sum(nil)
+}
+
+func (nl NodeList) GetPubkeys() []string {
+	var pubkeys []string
+	for _, node := range nl.NodeList {
+		if node.IsNormal {
+			pubkeys = append(pubkeys, node.Pubkey)
+		}
+	}
+	return pubkeys
 }

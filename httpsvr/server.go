@@ -55,6 +55,7 @@ func StartHTTP(node *node.BraftNode, user, pwd, endpoint string, allowedOrigins 
 	router.GET("/getblockbyheight/:height", basicAuth(hd.getBlockByHeight, user, pwd))
 	router.POST("/createtransaction", basicAuth(hd.createTx, user, pwd))
 	router.POST("/createblock", basicAuth(hd.createBlock, user, pwd))
+	router.POST("/watchedtx", basicAuth(hd.AddTx, user, pwd))
 	//获取节点数据
 	router.GET("/nodes", basicAuth(hd.GetNodes, user, pwd))
 	//获取当前区块

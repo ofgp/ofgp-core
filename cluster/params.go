@@ -5,14 +5,15 @@ import (
 	pb "dgateway/proto"
 	"dgateway/util/assert"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/spf13/viper"
 )
 
-// TODO 配置化
 var (
 	ClusterSize      int
 	TotalNodeCount   int
@@ -20,12 +21,31 @@ var (
 	AccuseQuorumN    int
 	MaxFaultyN       int
 	NodeList         []NodeInfo
+	ClusterSnapshot  *Snapshot //节点列表快照
 	DbCache          = 16
 	DbFileHandles    = 16
 	NodeSigners      map[int32]*crypto.SecureSigner
-	MultiSigSnapshot []MultiSigInfo
+	MultiSigSnapshot MultiSigInfos
 	CurrMultiSig     MultiSigInfo
 )
+
+type MultiSigInfos struct {
+	sync.Mutex
+	SigInfos []MultiSigInfo
+}
+
+func (msi MultiSigInfos) GetMultiSigInfos() []MultiSigInfo {
+	return msi.SigInfos
+}
+func (msi MultiSigInfos) GetLatestSigInfo() (MultiSigInfo, error) {
+	msi.Lock()
+	defer msi.Unlock()
+	size := len(msi.SigInfos)
+	if size == 0 {
+		return MultiSigInfo{}, errors.New("multisigs empty")
+	}
+	return msi.SigInfos[size-1], nil
+}
 
 const (
 	// BlockInterval 产出区块的频率
@@ -143,6 +163,7 @@ func RecoverNode(nodeId int32) {
 	MaxFaultyN = (ClusterSize - 1) / 3
 	QuorumN = (ClusterSize+MaxFaultyN)/2 + 1
 	AccuseQuorumN = MaxFaultyN + 1
+	DelSnapShot()
 }
 
 // GetPubkeyList 获取所有正常状态节点的公钥
@@ -158,18 +179,50 @@ func GetPubkeyList() []string {
 
 // AddMultiSigInfo 保存当前多签地址到快照列表
 func AddMultiSigInfo(multiSig MultiSigInfo) {
-	if len(MultiSigSnapshot) > 0 && MultiSigSnapshot[len(MultiSigSnapshot)-1].Equal(multiSig) {
+	MultiSigSnapshot.Lock()
+	defer MultiSigSnapshot.Unlock()
+	sigSnapshot := MultiSigSnapshot.SigInfos
+	if len(sigSnapshot) > 0 && sigSnapshot[len(sigSnapshot)-1].Equal(multiSig) {
 		return
 	}
-	MultiSigSnapshot = append(MultiSigSnapshot, multiSig)
+	MultiSigSnapshot.SigInfos = append(sigSnapshot, multiSig)
 }
 
 // SetMultiSigSnapshot 设置快照
 func SetMultiSigSnapshot(snapshot []MultiSigInfo) {
-	MultiSigSnapshot = snapshot
+	MultiSigSnapshot.SigInfos = snapshot
 }
 
 // SetCurrMultiSig 设置当前的多签信息
 func SetCurrMultiSig(multiSig MultiSigInfo) {
 	CurrMultiSig = multiSig
+}
+
+// CreateSnapShot 创建快照保存到变量 ClusterSnapshot
+func CreateSnapShot() *Snapshot {
+	nodes := make([]NodeInfo, len(NodeList))
+	copy(nodes, NodeList)
+	ClusterSnapshot = &Snapshot{
+		NodeList:       nodes,
+		ClusterSize:    ClusterSize,
+		TotalNodeCount: TotalNodeCount,
+		QuorumN:        QuorumN,
+		AccuseQuorumN:  AccuseQuorumN,
+	}
+	return ClusterSnapshot
+}
+
+func GetSnapshot() Snapshot {
+	snapshot := Snapshot{
+		NodeList:       NodeList,
+		ClusterSize:    ClusterSize,
+		TotalNodeCount: TotalNodeCount,
+		QuorumN:        QuorumN,
+		AccuseQuorumN:  AccuseQuorumN,
+	}
+	return snapshot
+}
+
+func DelSnapShot() {
+	ClusterSnapshot = nil
 }
