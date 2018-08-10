@@ -2,7 +2,6 @@ package crypto
 
 import (
 	"bytes"
-	"dgateway/util/assert"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -11,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/ofgp/ofgp-core/util/assert"
 )
 
 type signBody struct {

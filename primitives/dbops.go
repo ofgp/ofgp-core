@@ -1,16 +1,17 @@
 package primitives
 
 import (
-	"dgateway/cluster"
-	"dgateway/crypto"
-	"dgateway/dgwdb"
-	pb "dgateway/proto"
-	"dgateway/util"
-	"dgateway/util/assert"
 	"encoding/json"
 	"log"
 	"math/big"
 	"strconv"
+
+	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/crypto"
+	"github.com/ofgp/ofgp-core/dgwdb"
+	pb "github.com/ofgp/ofgp-core/proto"
+	"github.com/ofgp/ofgp-core/util"
+	"github.com/ofgp/ofgp-core/util/assert"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/syndtr/goleveldb/leveldb/iterator"

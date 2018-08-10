@@ -1,7 +1,7 @@
 package primitives
 
 import (
-	pb "dgateway/proto"
+	pb "github.com/ofgp/ofgp-core/proto"
 )
 
 var (

@@ -1,11 +1,12 @@
 package node
 
 import (
-	"dgateway/cluster"
-	"dgateway/crypto"
-	"dgateway/primitives"
-	pb "dgateway/proto"
 	"encoding/hex"
+
+	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/crypto"
+	"github.com/ofgp/ofgp-core/primitives"
+	pb "github.com/ofgp/ofgp-core/proto"
 )
 
 type CheckMode int

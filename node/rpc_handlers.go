@@ -1,10 +1,12 @@
 package node
 
 import (
-	"dgateway/cluster"
-	"dgateway/crypto"
-	pb "dgateway/proto"
 	"encoding/hex"
+
+	pb "github.com/ofgp/ofgp-core/proto"
+
+	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/crypto"
 
 	"github.com/spf13/viper"
 	context "golang.org/x/net/context"

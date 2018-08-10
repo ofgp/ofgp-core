@@ -1,15 +1,16 @@
 package cluster
 
 import (
-	"dgateway/crypto"
-	pb "dgateway/proto"
-	"dgateway/util/assert"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/ofgp/ofgp-core/crypto"
+	pb "github.com/ofgp/ofgp-core/proto"
+	"github.com/ofgp/ofgp-core/util/assert"
 
 	"github.com/spf13/viper"
 )

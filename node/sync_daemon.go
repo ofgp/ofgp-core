@@ -1,14 +1,15 @@
 package node
 
 import (
-	"dgateway/cluster"
-	"dgateway/dgwdb"
-	"dgateway/log"
-	"dgateway/primitives"
-	pb "dgateway/proto"
-	"dgateway/util/assert"
 	"fmt"
 	"sync"
+
+	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/dgwdb"
+	"github.com/ofgp/ofgp-core/log"
+	"github.com/ofgp/ofgp-core/primitives"
+	pb "github.com/ofgp/ofgp-core/proto"
+	"github.com/ofgp/ofgp-core/util/assert"
 
 	"github.com/spf13/viper"
 	context "golang.org/x/net/context"

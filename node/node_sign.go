@@ -1,13 +1,15 @@
 package node
 
 import (
-	btcwatcher "bitcoinWatcher/mortgagewatcher"
 	"bytes"
-	"dgateway/cluster"
-	pb "dgateway/proto"
-	"dgateway/util/assert"
 	"sync"
 	"time"
+
+	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
+
+	"github.com/ofgp/ofgp-core/cluster"
+	pb "github.com/ofgp/ofgp-core/proto"
+	"github.com/ofgp/ofgp-core/util/assert"
 
 	"sync/atomic"
 

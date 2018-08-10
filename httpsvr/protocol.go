@@ -1,11 +1,12 @@
 package httpsvr
 
 import (
-	"dgateway/crypto"
-	pb "dgateway/proto"
-	"dgateway/util"
 	"encoding/hex"
 	"time"
+
+	"github.com/ofgp/ofgp-core/crypto"
+	pb "github.com/ofgp/ofgp-core/proto"
+	"github.com/ofgp/ofgp-core/util"
 )
 
 type TestInput struct {

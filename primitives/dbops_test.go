@@ -2,13 +2,14 @@ package primitives_test
 
 import (
 	"bytes"
-	"dgateway/cluster"
-	"dgateway/dgwdb"
-	"dgateway/primitives"
 	"io/ioutil"
 	"math/big"
 	"os"
 	"testing"
+
+	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/dgwdb"
+	"github.com/ofgp/ofgp-core/primitives"
 )
 
 func InitDB(dir string) (*dgwdb.LDBDatabase, error) {

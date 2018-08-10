@@ -1,17 +1,20 @@
 package node
 
 import (
-	"dgateway/cluster"
-	"dgateway/crypto"
-	dgwLog "dgateway/log"
-	"dgateway/primitives"
-	pb "dgateway/proto"
 	"encoding/hex"
 	"errors"
-	ew "ethWatcher"
 	"fmt"
 	"sort"
 	"strings"
+
+	ew "github.com/ofgp/ethwatcher"
+
+	"github.com/ofgp/ofgp-core/primitives"
+	pb "github.com/ofgp/ofgp-core/proto"
+
+	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/crypto"
+	dgwLog "github.com/ofgp/ofgp-core/log"
 
 	log "github.com/inconshreveable/log15"
 )

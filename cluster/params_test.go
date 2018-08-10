@@ -1,10 +1,11 @@
 package cluster_test
 
 import (
-	"dgateway/cluster"
-	pb "dgateway/proto"
 	"strconv"
 	"testing"
+
+	"github.com/ofgp/ofgp-core/cluster"
+	pb "github.com/ofgp/ofgp-core/proto"
 
 	"github.com/spf13/viper"
 )

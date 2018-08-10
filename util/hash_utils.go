@@ -1,9 +1,10 @@
 package util
 
 import (
-	"dgateway/crypto"
 	"encoding/hex"
 	"strconv"
+
+	"github.com/ofgp/ofgp-core/crypto"
 )
 
 func FeedText(hasher *crypto.Hasher256, data string) {

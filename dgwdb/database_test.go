@@ -2,12 +2,13 @@ package dgwdb_test
 
 import (
 	"bytes"
-	"dgateway/dgwdb"
-	"dgateway/util"
 	"io/ioutil"
 	"os"
 	"strconv"
 	"testing"
+
+	"github.com/ofgp/ofgp-core/dgwdb"
+	"github.com/ofgp/ofgp-core/util"
 )
 
 var testValues = []string{"aaa", "bbb", "ccc"}

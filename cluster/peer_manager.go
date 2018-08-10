@@ -1,12 +1,13 @@
 package cluster
 
 import (
-	"dgateway/crypto"
-	"dgateway/log"
-	pb "dgateway/proto"
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/ofgp/ofgp-core/crypto"
+	"github.com/ofgp/ofgp-core/log"
+	pb "github.com/ofgp/ofgp-core/proto"
 
 	"github.com/spf13/viper"
 	"golang.org/x/net/context"

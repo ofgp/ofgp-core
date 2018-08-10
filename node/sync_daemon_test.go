@@ -1,13 +1,14 @@
 package node
 
 import (
-	"dgateway/cluster"
-	"dgateway/crypto"
-	"dgateway/primitives"
-	pb "dgateway/proto"
-	"dgateway/util"
 	"log"
 	"testing"
+
+	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/crypto"
+	"github.com/ofgp/ofgp-core/primitives"
+	pb "github.com/ofgp/ofgp-core/proto"
+	"github.com/ofgp/ofgp-core/util"
 
 	"github.com/spf13/viper"
 )

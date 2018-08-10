@@ -3,8 +3,9 @@ package crypto
 import (
 	"crypto/elliptic"
 	"crypto/sha256"
-	"dgateway/log"
 	"encoding/hex"
+
+	"github.com/ofgp/ofgp-core/log"
 
 	"github.com/btcsuite/btcd/btcec"
 	"github.com/spf13/viper"

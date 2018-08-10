@@ -1,12 +1,6 @@
 package main
 
 import (
-	"dgateway/accuser"
-	"dgateway/cluster"
-	"dgateway/httpsvr"
-	"dgateway/node"
-	"dgateway/util"
-	sg "dgateway/util/signal"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,6 +11,15 @@ import (
 	"runtime/pprof"
 	"syscall"
 	"time"
+
+	sg "github.com/ofgp/ofgp-core/util/signal"
+
+	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/httpsvr"
+	"github.com/ofgp/ofgp-core/node"
+	"github.com/ofgp/ofgp-core/util"
+
+	"github.com/ofgp/ofgp-core/accuser"
 
 	"github.com/rcrowley/go-metrics"
 	"github.com/spf13/viper"

@@ -1,17 +1,19 @@
 package proto
 
 import (
-	"dgateway/crypto"
-	"dgateway/util"
-	"dgateway/util/assert"
-	"dgateway/util/sort"
 	"fmt"
 	"log"
 	"strings"
 	"time"
 
-	btcwatcher "bitcoinWatcher/mortgagewatcher"
-	"ethWatcher"
+	"github.com/ofgp/ofgp-core/crypto"
+	"github.com/ofgp/ofgp-core/util"
+	"github.com/ofgp/ofgp-core/util/assert"
+	"github.com/ofgp/ofgp-core/util/sort"
+
+	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
+
+	"github.com/ofgp/ethwatcher"
 
 	"github.com/golang/protobuf/proto"
 )

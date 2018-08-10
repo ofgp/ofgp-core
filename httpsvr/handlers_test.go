@@ -2,14 +2,6 @@ package httpsvr_test
 
 import (
 	"bytes"
-	"dgateway/cluster"
-	"dgateway/crypto"
-	"dgateway/dgwdb"
-	"dgateway/httpsvr"
-	"dgateway/node"
-	"dgateway/primitives"
-	pb "dgateway/proto"
-	"dgateway/util"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
@@ -24,6 +16,17 @@ import (
 	"path"
 	"testing"
 	"time"
+
+	"github.com/ofgp/ofgp-core/util"
+
+	pb "github.com/ofgp/ofgp-core/proto"
+
+	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/crypto"
+	"github.com/ofgp/ofgp-core/dgwdb"
+	"github.com/ofgp/ofgp-core/httpsvr"
+	"github.com/ofgp/ofgp-core/node"
+	"github.com/ofgp/ofgp-core/primitives"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/julienschmidt/httprouter"

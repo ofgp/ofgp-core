@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package proto;
 
-import "dgateway/crypto/crypto.proto";
+import "github.com/ofgp/ofgp-core/crypto/crypto.proto";
 
 service Braft {
     // just for testing

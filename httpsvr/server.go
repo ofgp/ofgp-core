@@ -1,9 +1,10 @@
 package httpsvr
 
 import (
-	"dgateway/log"
-	"dgateway/node"
 	"net/http"
+
+	"github.com/ofgp/ofgp-core/log"
+	"github.com/ofgp/ofgp-core/node"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/rs/cors"

@@ -1,11 +1,12 @@
 package signal_test
 
 import (
-	sg "dgateway/util/signal"
 	"os"
 	"os/signal"
 	"syscall"
 	"testing"
+
+	sg "github.com/ofgp/ofgp-core/util/signal"
 )
 
 var isHandle = false

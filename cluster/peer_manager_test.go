@@ -1,12 +1,13 @@
 package cluster_test
 
 import (
-	"dgateway/cluster"
-	"dgateway/node"
-	pb "dgateway/proto"
 	"fmt"
 	"net"
 	"testing"
+
+	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/node"
+	pb "github.com/ofgp/ofgp-core/proto"
 
 	"google.golang.org/grpc"
 )

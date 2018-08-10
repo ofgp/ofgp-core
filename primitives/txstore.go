@@ -2,14 +2,15 @@ package primitives
 
 import (
 	"context"
-	"dgateway/crypto"
-	"dgateway/dgwdb"
-	pb "dgateway/proto"
-	"dgateway/util"
-	"dgateway/util/assert"
 	"encoding/hex"
 	"sync"
 	"time"
+
+	"github.com/ofgp/ofgp-core/crypto"
+	"github.com/ofgp/ofgp-core/dgwdb"
+	pb "github.com/ofgp/ofgp-core/proto"
+	"github.com/ofgp/ofgp-core/util"
+	"github.com/ofgp/ofgp-core/util/assert"
 )
 
 const (

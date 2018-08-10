@@ -1,8 +1,9 @@
 package crypto_test
 
 import (
-	"dgateway/crypto"
 	"testing"
+
+	"github.com/ofgp/ofgp-core/crypto"
 )
 
 func TestSigner(t *testing.T) {

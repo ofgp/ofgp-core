@@ -2,15 +2,6 @@ package node
 
 import (
 	"context"
-	"dgateway/accuser"
-	"dgateway/cluster"
-	"dgateway/crypto"
-	"dgateway/dgwdb"
-	"dgateway/log"
-	"dgateway/primitives"
-	pb "dgateway/proto"
-	"dgateway/util"
-	"dgateway/util/assert"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -24,9 +15,20 @@ import (
 	"sync"
 	"time"
 
-	"bitcoinWatcher/coinmanager"
-	btcwatcher "bitcoinWatcher/mortgagewatcher"
-	ew "ethWatcher"
+	"github.com/ofgp/ofgp-core/accuser"
+	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/crypto"
+	"github.com/ofgp/ofgp-core/dgwdb"
+	"github.com/ofgp/ofgp-core/log"
+	"github.com/ofgp/ofgp-core/primitives"
+	pb "github.com/ofgp/ofgp-core/proto"
+	"github.com/ofgp/ofgp-core/util"
+	"github.com/ofgp/ofgp-core/util/assert"
+
+	"github.com/ofgp/bitcoinWatcher/coinmanager"
+	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
+
+	ew "github.com/ofgp/ethwatcher"
 
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"

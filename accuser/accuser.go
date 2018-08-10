@@ -2,11 +2,13 @@ package accuser
 
 import (
 	"context"
-	"dgateway/cluster"
-	"dgateway/crypto"
-	"dgateway/log"
-	pb "dgateway/proto"
 	"time"
+
+	pb "github.com/ofgp/ofgp-core/proto"
+
+	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/crypto"
+	"github.com/ofgp/ofgp-core/log"
 
 	"github.com/spf13/viper"
 )

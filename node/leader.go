@@ -2,22 +2,24 @@ package node
 
 import (
 	"bytes"
-	"dgateway/cluster"
-	"dgateway/crypto"
-	"dgateway/log"
-	"dgateway/primitives"
-	"dgateway/util"
-	"dgateway/util/assert"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/crypto"
+	"github.com/ofgp/ofgp-core/log"
+	"github.com/ofgp/ofgp-core/primitives"
+	pb "github.com/ofgp/ofgp-core/proto"
+	"github.com/ofgp/ofgp-core/util"
+	"github.com/ofgp/ofgp-core/util/assert"
+
 	"github.com/spf13/viper"
 	context "golang.org/x/net/context"
 
-	btcwatcher "bitcoinWatcher/mortgagewatcher"
-	pb "dgateway/proto"
-	ew "ethWatcher"
+	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
+
+	ew "github.com/ofgp/ethwatcher"
 )
 
 const (

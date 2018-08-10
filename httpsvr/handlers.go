@@ -1,15 +1,17 @@
 package httpsvr
 
 import (
-	"dgateway/crypto"
-	"dgateway/node"
-	pb "dgateway/proto"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
+
+	pb "github.com/ofgp/ofgp-core/proto"
+
+	"github.com/ofgp/ofgp-core/crypto"
+	"github.com/ofgp/ofgp-core/node"
 
 	"github.com/julienschmidt/httprouter"
 )

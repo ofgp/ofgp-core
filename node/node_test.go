@@ -1,16 +1,18 @@
 package node
 
 import (
-	"bitcoinWatcher/coinmanager"
-	btcwatcher "bitcoinWatcher/mortgagewatcher"
-	"dgateway/cluster"
-	pb "dgateway/proto"
 	"fmt"
 	"io/ioutil"
 	"net"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/ofgp/bitcoinWatcher/coinmanager"
+	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
+
+	"github.com/ofgp/ofgp-core/cluster"
+	pb "github.com/ofgp/ofgp-core/proto"
 
 	"github.com/spf13/viper"
 	context "golang.org/x/net/context"

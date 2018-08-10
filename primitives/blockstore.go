@@ -2,14 +2,6 @@ package primitives
 
 import (
 	"bytes"
-	"dgateway/cluster"
-	"dgateway/crypto"
-	"dgateway/dgwdb"
-	"dgateway/log"
-	pb "dgateway/proto"
-	"dgateway/util"
-	"dgateway/util/assert"
-	"dgateway/util/task"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -19,9 +11,19 @@ import (
 	"sync"
 	"time"
 
-	btcfunc "bitcoinWatcher/coinmanager"
-	btcwatcher "bitcoinWatcher/mortgagewatcher"
-	ew "ethWatcher"
+	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/crypto"
+	"github.com/ofgp/ofgp-core/dgwdb"
+	"github.com/ofgp/ofgp-core/log"
+	pb "github.com/ofgp/ofgp-core/proto"
+	"github.com/ofgp/ofgp-core/util"
+	"github.com/ofgp/ofgp-core/util/assert"
+	"github.com/ofgp/ofgp-core/util/task"
+
+	btcfunc "github.com/ofgp/bitcoinWatcher/coinmanager"
+	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
+
+	ew "github.com/ofgp/ethwatcher"
 
 	"github.com/btcsuite/btcd/wire"
 	"github.com/spf13/viper"

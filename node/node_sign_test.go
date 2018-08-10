@@ -2,10 +2,6 @@ package node
 
 import (
 	"context"
-	"dgateway/cluster"
-	"dgateway/dgwdb"
-	"dgateway/primitives"
-	pb "dgateway/proto"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -13,6 +9,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/dgwdb"
+	"github.com/ofgp/ofgp-core/primitives"
+	pb "github.com/ofgp/ofgp-core/proto"
 )
 
 func TestSyncMap(t *testing.T) {
