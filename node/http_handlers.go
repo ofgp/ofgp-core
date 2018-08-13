@@ -328,8 +328,8 @@ type ChainRegID struct {
 type TokenRegInfo struct {
 	ContractAddr string `json:"contract_addr"`
 	Chain        string `json:"chain"`
-	ReceptChain  int32  `json:"recept_chain"`
-	ReceptToken  int32  `json:"recept_token"`
+	ReceptChain  uint32 `json:"recept_chain"`
+	ReceptToken  uint32 `json:"recept_token"`
 }
 
 type TokenRegID struct {
@@ -353,7 +353,7 @@ func (node *BraftNode) ChainRegister(regInfo *ChainRegInfo) {
 // GetChainRegisterID 查询链注册结果，如果成功，返回chainID，否则返回0
 func (node *BraftNode) GetChainRegisterID(newChain string, targetChain string) *ChainRegID {
 	if targetChain == "eth" {
-		chainID := node.ethWatcher.GetChainCode(targetChain)
+		chainID := node.ethWatcher.GetChainCode(newChain)
 		return &ChainRegID{ChainID: chainID}
 	}
 	return nil
@@ -363,8 +363,9 @@ func (node *BraftNode) GetChainRegisterID(newChain string, targetChain string) *
 func (node *BraftNode) TokenRegister(regInfo *TokenRegInfo) {
 	if regInfo.Chain == "eth" {
 		// 调用ETH合约接口注册新的token合约, proposal就使用contractaddr
+		addr := ew.HexToAddress(regInfo.ContractAddr)
 		_, err := node.ethWatcher.GatewayTransaction(node.signer.PubKeyHex, node.signer.PubkeyHash, ew.VOTE_METHOD_ADDAPP,
-			regInfo.ContractAddr, regInfo.ReceptChain, regInfo.ReceptToken, "TR_"+regInfo.ContractAddr)
+			addr, regInfo.ReceptChain, regInfo.ReceptToken, "TR_"+regInfo.ContractAddr)
 		if err != nil {
 			nodeLogger.Error("register new token failed", "err", err, "contractaddr", regInfo.ContractAddr)
 		} else {
