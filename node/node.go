@@ -889,7 +889,7 @@ type JoinMsg struct {
 }
 
 // InitJoin 根据引导节点做集群配置信息的初始化
-func InitJoin() *JoinMsg {
+func InitJoin(startMode int32) *JoinMsg {
 	initHost := viper.GetString("DGW.init_node_host")
 	joinMsg := new(JoinMsg)
 	if len(initHost) == 0 {
@@ -916,14 +916,19 @@ func InitJoin() *JoinMsg {
 	nodeLogger.Debug("init join get multisig address", "btc", multiSig.BtcAddress, "bch", multiSig.BchAddress)
 	cluster.InitWithNodeList(nodeList)
 
-	//创建当前集群的快照
-	cluster.CreateSnapShot()
+	if startMode == cluster.ModeJoin {
+		//创建当前集群的快照
+		cluster.CreateSnapShot()
 
-	cluster.AddNode(viper.GetString("DGW.local_host"), int32(len(nodeList.NodeList)), viper.GetString("DGW.local_pubkey"),
-		viper.GetString("KEYSTORE.local_pubkey_hash"))
-	localID := int32(len(nodeList.NodeList))
-	saveNewConfig(localID)
-	joinMsg.LocalID = localID
+		cluster.AddNode(viper.GetString("DGW.local_host"), int32(len(nodeList.NodeList)), viper.GetString("DGW.local_pubkey"),
+			viper.GetString("KEYSTORE.local_pubkey_hash"))
+		localID := int32(len(nodeList.NodeList))
+		saveNewConfig(localID)
+		joinMsg.LocalID = localID
+	} else {
+		// 观察节点或者是测试节点
+		joinMsg.LocalID = 0
+	}
 	return joinMsg
 }
 

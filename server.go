@@ -123,7 +123,7 @@ func run(ctx *cli.Context) {
 	if startMode == cluster.ModeNormal {
 		cluster.Init()
 	} else {
-		joinMsg = node.InitJoin()
+		joinMsg = node.InitJoin(startMode)
 		nodeId = joinMsg.LocalID
 	}
 	viper.WatchConfig()
