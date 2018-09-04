@@ -47,6 +47,8 @@ type Leader struct {
 	newNodeHost   string
 	leavingNodeId int32
 	hasTxToSign   bool
+	mintFeeRate   int64
+	burnFeeRate   int64
 
 	newTermChan      chan int64
 	newCommittedChan chan *pb.BlockPack
@@ -171,6 +173,12 @@ func (ld *Leader) Run(ctx context.Context) {
 			return
 		}
 	}
+}
+
+// SetFeeRate 设置网关的交易手续费
+func (ld *Leader) SetFeeRate(mintFeeRate int64, burnFeeRate int64) {
+	ld.mintFeeRate = mintFeeRate
+	ld.burnFeeRate = burnFeeRate
 }
 
 func (ld *Leader) isInCharge() bool {
@@ -473,13 +481,14 @@ func (ld *Leader) createBtcTx(watchedTx *pb.WatchedTxInfo, chainType string) *pb
 	}
 
 	for _, a := range watchedTx.RechargeList {
+		amount := a.Amount - a.Amount*int64(ld.burnFeeRate)/10000
 		watcherAddressInfo = append(watcherAddressInfo, &btcwatcher.AddressInfo{
-			Amount:  a.Amount,
+			Amount:  amount,
 			Address: a.Address,
 		})
 	}
 	leaderLogger.Debug("rechargelist", "sctxid", watchedTx.Txid, "addrs", watcherAddressInfo)
-	newlyTx, ok := watcher.CreateCoinTx(watcherAddressInfo, watchedTx.Fee, watchedTx.Txid)
+	newlyTx, ok := watcher.CreateCoinTx(watcherAddressInfo, cluster.QuorumN, cluster.ClusterSize)
 	if ok != 0 {
 		leaderLogger.Error("create new chan tx failed", "errcode", ok, "sctxid", watchedTx.Txid)
 		return nil
@@ -499,7 +508,9 @@ func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 	//input, err := ld.ethWatcher.EncodeMint(watchedTx.From, uint64(watchedTx.RechargeList[0].Amount),
 	// 	watchedTx.RechargeList[0].Address, watchedTx.Txid+strconv.FormatInt(util.NowMs(), 10))
 	addredss := ew.HexToAddress(watchedTx.RechargeList[0].Address)
-	input, err := ld.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, watchedTx.TokenTo, uint64(watchedTx.RechargeList[0].Amount),
+	amount := watchedTx.RechargeList[0].Amount - watchedTx.RechargeList[0].Amount*int64(ld.mintFeeRate)/10000
+	leaderLogger.Debug("createETHInput final amount", "amount", amount, "feerate", ld.mintFeeRate, "oriamount", watchedTx.RechargeList[0].Amount)
+	input, err := ld.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, watchedTx.TokenTo, uint64(amount),
 		addredss, watchedTx.Txid)
 	if err != nil {
 		leaderLogger.Error("create eth input failed", "err", err, "sctxid", watchedTx.Txid)

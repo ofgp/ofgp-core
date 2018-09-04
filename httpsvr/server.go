@@ -54,9 +54,9 @@ func StartHTTP(node *node.BraftNode, user, pwd, endpoint string, allowedOrigins 
 	router.GET("/getblockheight", basicAuth(hd.GetBlockHeight, user, pwd))
 	router.GET("/gettransactionbyscid/:txid", basicAuth(hd.GetTxBySidechainTxId, user, pwd))
 	router.GET("/getblockbyheight/:height", basicAuth(hd.getBlockByHeight, user, pwd))
-	router.POST("/createtransaction", basicAuth(hd.createTx, user, pwd))
+	router.GET("/gettxsbyblockrange", basicAuth(hd.getBlockTxsBySec, user, pwd))
 	router.POST("/createblock", basicAuth(hd.createBlock, user, pwd))
-	router.POST("/watchedtx", basicAuth(hd.AddTx, user, pwd))
+	router.POST("/watchedtx", basicAuth(hd.addTx, user, pwd))
 	//获取节点数据
 	router.GET("/nodes", basicAuth(hd.GetNodes, user, pwd))
 	//获取当前区块
@@ -72,5 +72,8 @@ func StartHTTP(node *node.BraftNode, user, pwd, endpoint string, allowedOrigins 
 	router.GET("/chainreg", basicAuth(hd.getChainRegisterID, user, pwd))
 	router.POST("/tokenreg", basicAuth(hd.tokenRegister, user, pwd))
 	router.GET("/tokenreg", basicAuth(hd.getTokenRegisterID, user, pwd))
+	//for wallet app
+	router.GET("/exconfig", basicAuth(hd.getExConfig, user, pwd))
+	router.GET("/mint_payload", basicAuth(hd.getMintPayload, user, pwd))
 	go http.ListenAndServe(endpoint, c.Handler(router))
 }

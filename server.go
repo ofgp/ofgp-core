@@ -97,10 +97,12 @@ func run(ctx *cli.Context) {
 		defer pprof.WriteHeapProfile(f)
 	}
 
-	go func() {
-		log.Println(http.ListenAndServe(viper.GetString("DGW.pprof_host"), nil))
-		// log.Println(http.ListenAndServe(":8060", nil))
-	}()
+	if len(viper.GetString("DGW.pprof_host")) > 0 {
+		go func() {
+			log.Println(http.ListenAndServe(viper.GetString("DGW.pprof_host"), nil))
+			// log.Println(http.ListenAndServe(":8060", nil))
+		}()
+	}
 
 	nodeId := viper.GetInt32("DGW.local_id")
 	startMode := viper.GetInt32("DGW.start_mode")
@@ -112,12 +114,12 @@ func run(ctx *cli.Context) {
 	//交易处理超时时间
 	node.ConfirmTolerance = viper.GetDuration("DGW.confirm_tolerance")
 	//交易链上check并发数
-	node.CheckOnChainCur = viper.GetInt("check_onchain_cur")
+	node.CheckOnChainCur = viper.GetInt("DGW.check_onchain_cur")
 	//交易链上check 周期
-	node.CheckOnChainInterval = viper.GetDuration("check_onchain_interval")
+	node.CheckOnChainInterval = viper.GetDuration("DGW.check_onchain_interval")
 
 	//设置发起accuse 的间隔
-	accuser.AccuseInterval = viper.GetInt64("accuse_interval")
+	accuser.AccuseInterval = viper.GetInt64("DGW.accuse_interval")
 
 	var joinMsg *node.JoinMsg
 	if startMode == cluster.ModeNormal {
@@ -126,7 +128,6 @@ func run(ctx *cli.Context) {
 		joinMsg = node.InitJoin(startMode)
 		nodeId = joinMsg.LocalID
 	}
-	viper.WatchConfig()
 
 	httpPort := viper.GetInt("DGW.local_http_port")
 	cros := []string{}

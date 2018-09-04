@@ -54,6 +54,9 @@ type BlockStore struct {
 	prepareCache map[int64]map[int64][]*pb.PrepareMsg
 	commitCache  map[int64]map[int64][]*pb.CommitMsg
 
+	mintFeeRate int64
+	burnFeeRate int64
+
 	NeedSyncUpEvent            *util.Event
 	NewInitedEvent             *util.Event
 	NewPreparedEvent           *util.Event
@@ -108,6 +111,12 @@ func NewBlockStore(db *dgwdb.LDBDatabase, ts *TxStore, btcWatcher *btcwatcher.Mo
 		LeaveCancelEvent:           util.NewEvent(),
 		ReconfigEvent:              util.NewEvent(),
 	}
+}
+
+// SetFeeRate 设置网关的交易手续费
+func (bs *BlockStore) SetFeeRate(mintFeeRate int64, burnFeeRate int64) {
+	bs.mintFeeRate = mintFeeRate
+	bs.burnFeeRate = burnFeeRate
 }
 
 // GetNodeTerm 获取节点的term
@@ -1017,7 +1026,8 @@ func (bs *BlockStore) validateBtcSignTx(req *pb.SignTxRequest, newlyTx *wire.Msg
 	for idx, recharge := range req.WatchedTx.RechargeList {
 		txOut := newlyTx.TxOut[idx]
 		outAddress := btcfunc.ExtractPkScriptAddr(txOut.PkScript, req.WatchedTx.To)
-		if outAddress != recharge.Address || txOut.Value != recharge.Amount {
+		amount := recharge.Amount - recharge.Amount*bs.burnFeeRate/10000
+		if outAddress != recharge.Address || txOut.Value != amount {
 			bsLogger.Warn("recharge address or amount not equal", "outAddr", outAddress,
 				"rechargeAddr", recharge.Address, "outAmount", txOut.Value, "rechargeAmount", recharge.Amount)
 			return wrongInputOutput
@@ -1073,7 +1083,9 @@ func (bs *BlockStore) validateEthSignTx(req *pb.SignTxRequest) int {
 		return wrongInputOutput
 	}
 	addredss := ew.HexToAddress(req.WatchedTx.RechargeList[0].Address)
-	localInput, _ := bs.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, req.WatchedTx.TokenTo, uint64(req.WatchedTx.RechargeList[0].Amount),
+	amount := req.WatchedTx.RechargeList[0].Amount - req.WatchedTx.RechargeList[0].Amount*bs.mintFeeRate/10000
+	bsLogger.Debug("validateETHSignTx final amount", "amount", amount, "feerate", bs.mintFeeRate, "oriamount", req.WatchedTx.RechargeList[0].Amount)
+	localInput, _ := bs.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, req.WatchedTx.TokenTo, uint64(amount),
 		addredss, req.WatchedTx.Txid)
 	if !bytes.Equal(req.NewlyTx.Data, localInput) {
 		bsLogger.Warn("verify eth input not passed", "sctxid", req.WatchedTx.Txid)

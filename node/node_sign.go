@@ -84,8 +84,10 @@ func (node *BraftNode) clearOnFail(signReq *pb.SignTxRequest) {
 	node.blockStore.DeleteSignReqMsg(signReq.WatchedTx.Txid)
 
 	if !signReq.WatchedTx.IsTransferTx() && !node.hasTxInWaitting(signReq.WatchedTx.Txid) {
+		leaderLogger.Debug("add to fresh queue", "sctxid", signReq.WatchedTx.Txid)
 		node.txStore.AddFreshWatchedTx(signReq.WatchedTx)
 	} else {
+		leaderLogger.Debug("just delete watched tx", "sctxid", signReq.WatchedTx.Txid, "is_in_waiting", node.hasTxInWaitting(signReq.WatchedTx.Txid))
 		node.txStore.DeleteWatchedTx(signReq.WatchedTx.Txid)
 	}
 }

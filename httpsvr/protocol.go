@@ -1,9 +1,12 @@
 package httpsvr
 
 import (
+	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"time"
 
+	"github.com/btcsuite/btcd/txscript"
 	"github.com/ofgp/ofgp-core/crypto"
 	pb "github.com/ofgp/ofgp-core/proto"
 	"github.com/ofgp/ofgp-core/util"
@@ -158,4 +161,36 @@ func toBlockPack(block *fakeBlockInfo, currBlockHash *crypto.Digest256, height i
 	}
 	bp := pb.NewBlockPack(init)
 	return bp
+}
+
+type exConfigResponse struct {
+	BCHMultiAddr     string `json:"bch_multiaddr"`
+	BTCMultiAddr     string `json:"btc_multiaddr"`
+	MintFeeRate      int64  `json:"mint_fee_rate"`
+	BurnFeeRate      int64  `json:"burn_fee_rate"`
+	MinBCHMintAmount int64  `json:"min_bch_mint_amount"`
+	MinBTCMintAmount int64  `json:"min_btc_mint_amount"`
+	MinBurnAmount    int64  `json:"min_burn_amount"`
+}
+
+type mintPayloadResponse struct {
+	Payload string `json:"payload"`
+}
+
+func newBCHMintPayload(chain string, app uint32, addr string) (*mintPayloadResponse, error) {
+	builder := txscript.NewScriptBuilder()
+	builder.AddOp(txscript.OP_RETURN)
+	// prefix "FGP"
+	builder.AddData([]byte{0x00, 0x66, 0x67, 0x70})
+	builder.AddData([]byte(chain))
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.BigEndian, app)
+	builder.AddData(buf.Bytes())
+	builder.AddData([]byte(addr))
+
+	payload, err := builder.Script()
+	if err != nil {
+		return nil, err
+	}
+	return &mintPayloadResponse{hex.EncodeToString(payload)}, nil
 }

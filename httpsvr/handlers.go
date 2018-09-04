@@ -10,6 +10,7 @@ import (
 
 	pb "github.com/ofgp/ofgp-core/proto"
 
+	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/crypto"
 	"github.com/ofgp/ofgp-core/node"
 
@@ -20,8 +21,11 @@ type httpHandlerFunc func()
 
 const (
 	maxRequestContentLen = 1024 * 128
+	modeErrCode          = 403
 	paramErrCode         = 501
 	sysErrCode           = 502
+
+	modeErrMsg = "firbidden operation"
 )
 
 // HTTPHandler 提供了HTTP请求的处理函数
@@ -132,6 +136,10 @@ func (hd *HTTPHandler) getBlockTxsBySec(w http.ResponseWriter, r *http.Request, 
 		fmt.Fprintf(w, "%s", newData(paramErrCode, err.Error(), nil))
 		return
 	}
+	if end > start+1000 {
+		fmt.Fprintf(w, "%s", newData(paramErrCode, "must less than 1000 blocks", nil))
+		return
+	}
 	var res []txMap
 	for ; start < end; start++ {
 		block := hd.node.GetBlockInfo(start)
@@ -146,6 +154,11 @@ func (hd *HTTPHandler) getBlockTxsBySec(w http.ResponseWriter, r *http.Request, 
 }
 
 func (hd *HTTPHandler) createBlock(w http.ResponseWriter, r *http.Request, _ httprouter.Params) {
+	mode := node.GetStartMode()
+	if mode != cluster.ModeTest {
+		fmt.Fprintf(w, "%s", newData(modeErrCode, modeErrMsg, nil))
+		return
+	}
 	body := io.LimitReader(r.Body, maxRequestContentLen)
 	param := new(fakeBlockInfo)
 	err := json.NewDecoder(body).Decode(param)
@@ -242,6 +255,11 @@ func (hd *HTTPHandler) GetTransActionByID(w http.ResponseWriter, req *http.Reque
 }
 
 func (hd *HTTPHandler) chainRegister(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	mode := node.GetStartMode()
+	if mode != cluster.ModeNormal && mode != cluster.ModeJoin {
+		fmt.Fprintf(w, "%s", newData(modeErrCode, modeErrMsg, nil))
+		return
+	}
 	body := io.LimitReader(req.Body, maxRequestContentLen)
 	param := new(node.ChainRegInfo)
 	err := json.NewDecoder(body).Decode(param)
@@ -254,6 +272,11 @@ func (hd *HTTPHandler) chainRegister(w http.ResponseWriter, req *http.Request, _
 }
 
 func (hd *HTTPHandler) getChainRegisterID(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	mode := node.GetStartMode()
+	if mode != cluster.ModeNormal && mode != cluster.ModeJoin {
+		fmt.Fprintf(w, "%s", newData(modeErrCode, modeErrMsg, nil))
+		return
+	}
 	newChain := req.FormValue("newchain")
 	targetChain := req.FormValue("targetchain")
 	chainID := hd.node.GetChainRegisterID(newChain, targetChain)
@@ -262,6 +285,11 @@ func (hd *HTTPHandler) getChainRegisterID(w http.ResponseWriter, req *http.Reque
 
 // tokenRegister token合约向网关注册
 func (hd *HTTPHandler) tokenRegister(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	mode := node.GetStartMode()
+	if mode != cluster.ModeNormal && mode != cluster.ModeJoin {
+		fmt.Fprintf(w, "%s", newData(modeErrCode, modeErrMsg, nil))
+		return
+	}
 	body := io.LimitReader(req.Body, maxRequestContentLen)
 	param := new(node.TokenRegInfo)
 	err := json.NewDecoder(body).Decode(param)
@@ -274,12 +302,18 @@ func (hd *HTTPHandler) tokenRegister(w http.ResponseWriter, req *http.Request, _
 }
 
 func (hd *HTTPHandler) getTokenRegisterID(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	mode := node.GetStartMode()
+	if mode != cluster.ModeNormal && mode != cluster.ModeJoin {
+		fmt.Fprintf(w, "%s", newData(modeErrCode, modeErrMsg, nil))
+		return
+	}
 	chain := req.FormValue("chain")
 	contractAddr := req.FormValue("contractaddr")
 	regID := hd.node.GetTokenRegisterID(chain, contractAddr)
 	writeResponse(&w, newOKData(regID))
 }
-func (hd *HTTPHandler) AddTx(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+
+func (hd *HTTPHandler) addTx(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
 	body := io.LimitReader(req.Body, maxRequestContentLen)
 	tx := new(pb.WatchedTxInfo)
 	if body == nil {
@@ -312,6 +346,43 @@ func (hd *HTTPHandler) AddTx(w http.ResponseWriter, req *http.Request, _ httprou
 	}
 	writeResponse(&w, newOKData(nil))
 }
+
+func (hd *HTTPHandler) getExConfig(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	config := exConfigResponse{
+		BCHMultiAddr:     cluster.CurrMultiSig.BchAddress,
+		BTCMultiAddr:     cluster.CurrMultiSig.BtcAddress,
+		MintFeeRate:      hd.node.GetMintFeeRate(),
+		BurnFeeRate:      hd.node.GetBurnFeeRate(),
+		MinBCHMintAmount: hd.node.GetMinBCHMintAmount(),
+		MinBTCMintAmount: hd.node.GetMinBTCMintAmount(),
+		MinBurnAmount:    hd.node.GetMinBurnAmount(),
+	}
+	writeResponse(&w, newOKData(config))
+}
+
+func (hd *HTTPHandler) getMintPayload(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	fromChain := req.FormValue("fromchain")
+	toChain := req.FormValue("tochain")
+	appNumber, err := strconv.Atoi(req.FormValue("app"))
+	addr := req.FormValue("addr")
+
+	if err != nil || len(fromChain) == 0 || len(toChain) == 0 || len(addr) == 0 || appNumber <= 0 {
+		fmt.Fprintf(w, "%s", newData(paramErrCode, "param illegal", nil))
+		return
+	}
+
+	if fromChain == "btc" || fromChain == "bch" {
+		payload, err := newBCHMintPayload(toChain, uint32(appNumber), addr)
+		if err != nil {
+			fmt.Fprintf(w, "%s", newData(sysErrCode, err.Error(), nil))
+			return
+		}
+		writeResponse(&w, newOKData(payload))
+	} else {
+		fmt.Fprintf(w, "%s", newData(paramErrCode, "chain not support", nil))
+	}
+}
+
 func writeResponse(w *http.ResponseWriter, r interface{}) {
 	rst, err := json.Marshal(r)
 	if err != nil {

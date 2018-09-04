@@ -28,6 +28,10 @@ func init() {
 	apiLog = dgwLog.New("debug", "http_api")
 }
 
+func (node *BraftNode) GetNodeTerm() int64 {
+	return node.blockStore.GetNodeTerm()
+}
+
 func (node *BraftNode) GetBlockHeight() int64 {
 	return node.blockStore.GetCommitHeight()
 }
@@ -284,8 +288,9 @@ type NodeView struct {
 
 func (node *BraftNode) GetNodes() []NodeView {
 	nodeViews := make([]NodeView, 0)
-	leaderID := cluster.LeaderNodeOfTerm(node.leader.term)
-	apiLog.Error("leader id is", "leaderID", leaderID, "term is ", node.leader.term)
+	term := node.GetNodeTerm()
+	leaderID := cluster.LeaderNodeOfTerm(term)
+	apiLog.Error("leader id is", "leaderID", leaderID, "term is ", term)
 	nodeRuntimeInfos := node.peerManager.GetNodeRuntimeInfos()
 	for _, node := range cluster.NodeList {
 		var isLeader bool
@@ -402,4 +407,29 @@ func getHeightAndLeaderCnt(nodeID int32,
 		return
 	}
 	return apiData.EthHeight, apiData.BtcHeight, apiData.BchHeight, apiData.LeaderCnt
+}
+
+// GetMinBCHMintAmount 返回BCH链铸币的最小金额
+func (node *BraftNode) GetMinBCHMintAmount() int64 {
+	return node.minBCHMintAmount
+}
+
+// GetMinBTCMintAmount 返回BCH链铸币的最小金额
+func (node *BraftNode) GetMinBTCMintAmount() int64 {
+	return node.minBTCMintAmount
+}
+
+// GetMinBurnAmount 返回熔币的最小金额
+func (node *BraftNode) GetMinBurnAmount() int64 {
+	return node.minBurnAmount
+}
+
+// GetMintFeeRate 返回铸币的手续费
+func (node *BraftNode) GetMintFeeRate() int64 {
+	return node.mintFeeRate
+}
+
+// GetBurnFeeRate 返回熔币的手续费
+func (node *BraftNode) GetBurnFeeRate() int64 {
+	return node.burnFeeRate
 }
