@@ -302,6 +302,8 @@ func (node *BraftNode) GetNodes() []NodeView {
 		ethH, btcH, bchH, LeaderCnt := getHeightAndLeaderCnt(node.Id, nodeRuntimeInfos)
 		if isLeader && LeaderCnt > 0 {
 			firedCnt = LeaderCnt - 1
+		} else {
+			firedCnt = LeaderCnt
 		}
 		nodeView := NodeView{
 			IP:        ip,
