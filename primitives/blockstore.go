@@ -126,6 +126,13 @@ func (bs *BlockStore) GetNodeTerm() int64 {
 	return GetNodeTerm(bs.db)
 }
 
+// SetNodeTerm 保存节点的term
+func (bs *BlockStore) SetNodeTerm(term int64) {
+	mu.Lock()
+	SetNodeTerm(bs.db, term)
+	mu.Unlock()
+}
+
 // GetFresh 获取节点当前共识中的block
 func (bs *BlockStore) GetFresh() *pb.BlockPack {
 	mu.RLock()
