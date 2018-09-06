@@ -289,10 +289,8 @@ func (bs *BlockStore) GetClusterSnapshot(address string) *cluster.Snapshot {
 func (bs *BlockStore) HandleInitMsg(msg *pb.InitMsg) {
 	deferredEvents := &task.Queue{}
 	mu.Lock()
-	bsLogger.Debug("get lock, begin handle init msg")
 	bs.handleInitMsg(deferredEvents, msg)
 	mu.Unlock()
-	bsLogger.Debug("free lock, handle init msg done")
 	deferredEvents.ExecAll()
 }
 
@@ -300,10 +298,8 @@ func (bs *BlockStore) HandleInitMsg(msg *pb.InitMsg) {
 func (bs *BlockStore) HandlePrepareMsg(msg *pb.PrepareMsg) {
 	deferredEvents := &task.Queue{}
 	mu.Lock()
-	bsLogger.Debug("get lock, begin handle prepare msg")
 	bs.handlePrepareMsg(deferredEvents, msg)
 	mu.Unlock()
-	bsLogger.Debug("free lock, handle prepare msg done")
 	deferredEvents.ExecAll()
 }
 
@@ -311,10 +307,8 @@ func (bs *BlockStore) HandlePrepareMsg(msg *pb.PrepareMsg) {
 func (bs *BlockStore) HandleCommitMsg(msg *pb.CommitMsg) {
 	deferredEvents := &task.Queue{}
 	mu.Lock()
-	bsLogger.Debug("get lock, begin handle commit msg")
 	bs.handleCommitMsg(deferredEvents, msg)
 	mu.Unlock()
-	bsLogger.Debug("free lock, handle commit msg done")
 	deferredEvents.ExecAll()
 }
 

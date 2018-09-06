@@ -270,9 +270,11 @@ func (ts *TxStore) AddFreshWatchedTx(tx *pb.WatchedTxInfo) {
 func (ts *TxStore) GetFreshWatchedTxs() []*WatchedTxInfo {
 	ts.Lock()
 	var rst []*WatchedTxInfo
+	var reAppend []*WatchedTxInfo
 	for _, v := range ts.freshWatchedTxInfo {
 		// 本term内已经确定加签失败的交易，下个term再重新发起
 		if IsSignFailed(ts.db, v.Tx.Txid, ts.currTerm) {
+			reAppend = append(reAppend, v)
 			continue
 		}
 		if ts.HasTxInDB(v.Tx.Txid) || ts.hasTxInMemPool(v.Tx.Txid) { //已从其他节点同步
@@ -284,6 +286,9 @@ func (ts *TxStore) GetFreshWatchedTxs() []*WatchedTxInfo {
 		rst = append(rst, v)
 	}
 	ts.freshWatchedTxInfo = make(map[string]*WatchedTxInfo)
+	for _, v := range reAppend {
+		ts.freshWatchedTxInfo[v.Tx.Txid] = v
+	}
 	ts.Unlock()
 	return rst
 }

@@ -157,7 +157,6 @@ func GetVotie(db *dgwdb.LDBDatabase) *pb.Votie {
 
 // JustCommitIt 不做任何校验，直接保存区块
 func JustCommitIt(db *dgwdb.LDBDatabase, blockPack *pb.BlockPack) {
-	bsLogger.Debug("write block to db", "txcount", len(blockPack.Block().Txs), "height", blockPack.Height())
 	bpBytes, err := proto.Marshal(blockPack)
 	assert.ErrorIsNil(err)
 	hBytes := util.I64ToBytes(blockPack.Height())
