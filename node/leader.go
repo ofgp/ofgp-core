@@ -480,8 +480,9 @@ func (ld *Leader) createBtcTx(watchedTx *pb.WatchedTxInfo, chainType string) *pb
 		watcher = ld.btcWatcher
 	}
 
+	var amount int64
 	for _, a := range watchedTx.RechargeList {
-		amount := a.Amount - a.Amount*int64(ld.burnFeeRate)/10000
+		amount = a.Amount - a.Amount*int64(ld.burnFeeRate)/10000
 		watcherAddressInfo = append(watcherAddressInfo, &btcwatcher.AddressInfo{
 			Amount:  amount,
 			Address: a.Address,
@@ -501,7 +502,7 @@ func (ld *Leader) createBtcTx(watchedTx *pb.WatchedTxInfo, chainType string) *pb
 		leaderLogger.Error("serialize newly tx failed", "err", err)
 		return nil
 	}
-	return &pb.NewlyTx{Data: buf.Bytes()}
+	return &pb.NewlyTx{Data: buf.Bytes(), Amount: amount}
 }
 
 func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
@@ -516,7 +517,7 @@ func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 		leaderLogger.Error("create eth input failed", "err", err, "sctxid", watchedTx.Txid)
 		return nil
 	}
-	return &pb.NewlyTx{Data: input}
+	return &pb.NewlyTx{Data: input, Amount: amount}
 }
 
 // 广播签名交易, 对于ETH，广播给其他节点即可；对于BTC/BCH，广播之后还需要收集返回的签名，按顺序merge之后去公链上发送交易

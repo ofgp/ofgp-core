@@ -84,6 +84,7 @@ type TxView struct {
 	ToFee       int64    `json:"to_fee"`
 	TokenCode   uint32   `json:"token_code"`
 	AppCode     uint32   `json:"app_code"`
+	FinalAmount int64    `json:"final_amount"` //扣除手续费后的金额
 }
 
 func getHexString(digest *crypto.Digest256) string {
@@ -128,6 +129,8 @@ func (node *BraftNode) createTxView(blockID string, height int64, tx *pb.Transac
 		Time:        tx.Time,
 		TokenCode:   tokenCode,
 		AppCode:     appCode,
+		FinalAmount: tx.Amount,
+		DGWFee:      watchedTx.Amount - tx.Amount,
 	}
 	return txView
 }

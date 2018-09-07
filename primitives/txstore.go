@@ -316,7 +316,7 @@ func (ts *TxStore) DeleteWatchedTx(txId string) {
 }
 
 // CreateInnerTx 创建一笔网关本身的交易
-func (ts *TxStore) CreateInnerTx(newlyTxId string, signMsgId string) {
+func (ts *TxStore) CreateInnerTx(newlyTxId string, signMsgId string, amount int64) {
 	signMsg := GetSignMsg(ts.db, signMsgId)
 	if signMsg == nil {
 		bsLogger.Error("create inner tx failed, sign msg not found", "signmsgid", signMsgId,
@@ -329,6 +329,7 @@ func (ts *TxStore) CreateInnerTx(newlyTxId string, signMsgId string) {
 		WatchedTx: signMsg.WatchedTx.Clone(),
 		NewlyTxId: newlyTxId,
 		Time:      time.Now().Unix(),
+		Amount:    amount,
 	}
 	// 这个时候监听到的交易已经成功处理并上链了，先清理监听交易缓存
 	ts.Lock()

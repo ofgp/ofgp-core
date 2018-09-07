@@ -711,7 +711,12 @@ func (bn *BraftNode) dealEthEvent(ev *ew.PushEvent) {
 		nodeLogger.Debug("receive eth create", "tx", ev.Tx.TxHash.Hex())
 		go func(scTxId string) {
 			bn.mu.Lock()
-			bn.txStore.CreateInnerTx(ev.Tx.TxHash.Hex(), scTxId)
+			signReqMsg := bn.blockStore.GetSignReqMsg(scTxId)
+			var amount int64
+			if signReqMsg != nil {
+				amount = signReqMsg.NewlyTx.Amount
+			}
+			bn.txStore.CreateInnerTx(ev.Tx.TxHash.Hex(), scTxId, amount)
 			delete(bn.waitingConfirmTxs, mintData.Proposal)
 			bn.mu.Unlock()
 		}(mintData.Proposal)
@@ -768,11 +773,11 @@ func (bn *BraftNode) deleteFromWaiting(id string) {
 func (bn *BraftNode) checkTxOnChain(tx *waitingConfirmTx, wg *sync.WaitGroup) {
 	defer wg.Done()
 	hash := tx.msgId
+	signReqMsg := bn.blockStore.GetSignReqMsg(hash)
 	// 已经发送出去的交易，超时不引起任何accuse，仅打印日志记录。因为有可能是链上拥堵
 	if tx.isTimeout() && !tx.inMem {
 		nodeLogger.Debug("has timeout tx", "sctxid", tx.msgId)
 		bn.deleteFromWaiting(tx.msgId)
-		signReqMsg := bn.blockStore.GetSignReqMsg(hash)
 		if signReqMsg != nil {
 			bn.clearOnFail(signReqMsg)
 		}
@@ -786,7 +791,7 @@ func (bn *BraftNode) checkTxOnChain(tx *waitingConfirmTx, wg *sync.WaitGroup) {
 				tx.setInMem()
 			}
 			if chainTx.Confirmations >= uint64(BchConfirms) {
-				bn.txStore.CreateInnerTx(chainTx.ScTxid, tx.msgId)
+				bn.txStore.CreateInnerTx(chainTx.ScTxid, tx.msgId, signReqMsg.NewlyTx.Amount)
 				bn.deleteFromWaiting(tx.msgId)
 			}
 		}
@@ -797,7 +802,7 @@ func (bn *BraftNode) checkTxOnChain(tx *waitingConfirmTx, wg *sync.WaitGroup) {
 				tx.setInMem()
 			}
 			if chainTx.Confirmations >= uint64(BtcConfirms) {
-				bn.txStore.CreateInnerTx(chainTx.ScTxid, tx.msgId)
+				bn.txStore.CreateInnerTx(chainTx.ScTxid, tx.msgId, signReqMsg.NewlyTx.Amount)
 				bn.deleteFromWaiting(tx.msgId)
 			}
 		}

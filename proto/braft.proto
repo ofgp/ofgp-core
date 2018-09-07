@@ -90,6 +90,7 @@ message WatchedTxInfo {
 // 网关在主/侧链上新发起的交易
 message NewlyTx {
     bytes data = 1;
+    int64 amount = 2;
 }
 
 message Transaction {
@@ -97,6 +98,8 @@ message Transaction {
     WatchedTxInfo watched_tx = 2;
     string newly_tx_id = 3;
     int64 time = 4;
+    // 扣除手续费后最终在侧链上的金额
+    int64 amount = 5;
 }
 
 message Transactions {
