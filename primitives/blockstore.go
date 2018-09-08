@@ -256,6 +256,16 @@ func (bs *BlockStore) GetBlockByHash(blockID *crypto.Digest256) *pb.BlockPack {
 	return GetCommitByID(bs.db, blockID)
 }
 
+// GetFinalAmount 获取最终金额
+func (bs *BlockStore) GetFinalAmount(scTxID string) int64 {
+	return GetFinalAmount(bs.db, scTxID)
+}
+
+// SetFinalAmount 保存最终金额
+func (bs *BlockStore) SetFinalAmount(amount int64, scTxID string) {
+	SetFinalAmount(bs.db, amount, scTxID)
+}
+
 // JustCommitIt 不做校验，直接保存区块
 func (bs *BlockStore) JustCommitIt(blockPack *pb.BlockPack) {
 	mu.Lock()

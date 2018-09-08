@@ -502,6 +502,7 @@ func (ld *Leader) createBtcTx(watchedTx *pb.WatchedTxInfo, chainType string) *pb
 		leaderLogger.Error("serialize newly tx failed", "err", err)
 		return nil
 	}
+	ld.blockStore.SetFinalAmount(amount, watchedTx.Txid)
 	return &pb.NewlyTx{Data: buf.Bytes(), Amount: amount}
 }
 
@@ -517,6 +518,7 @@ func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 		leaderLogger.Error("create eth input failed", "err", err, "sctxid", watchedTx.Txid)
 		return nil
 	}
+	ld.blockStore.SetFinalAmount(amount, watchedTx.Txid)
 	return &pb.NewlyTx{Data: input, Amount: amount}
 }
 

@@ -38,6 +38,7 @@ var (
 	keySignedResultPrefix  = []byte("SR")
 	keyHeightPrefix        = []byte("CH")
 	keyProposalPrefix      = []byte("PP")
+	keyFinalAmountPrefix   = []byte("FA")
 	// 保存accuse历史记录
 	keyAccuseRecordsPrefix   = []byte("AR")
 	keyClusterSnapshotPrefix = []byte("CS")
@@ -540,4 +541,25 @@ func GetETHBlockTxIndex(db *dgwdb.LDBDatabase) int {
 		return 0
 	}
 	return res
+}
+
+// SetFinalAmount 保存扣除手续费后的最终金额
+func SetFinalAmount(db *dgwdb.LDBDatabase, amount int64, scTxID string) {
+	key := append(keyFinalAmountPrefix, []byte(scTxID)...)
+	data := util.I64ToBytes(amount)
+	db.Put(key, data)
+}
+
+// GetFinalAmount 获取最终金额
+func GetFinalAmount(db *dgwdb.LDBDatabase, scTxID string) int64 {
+	key := append(keyFinalAmountPrefix, []byte(scTxID)...)
+	data, err := db.Get(key)
+	if err != nil {
+		return 0
+	}
+	amount, err := util.BytesToI64(data)
+	if err != nil {
+		return 0
+	}
+	return amount
 }

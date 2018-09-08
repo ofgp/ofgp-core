@@ -325,6 +325,9 @@ func (ts *TxStore) CreateInnerTx(newlyTxId string, signMsgId string, amount int6
 	}
 	bsLogger.Debug("create inner tx", "from", signMsg.WatchedTx.From, "to", signMsg.WatchedTx.To,
 		"sctxid", signMsg.WatchedTx.Txid, "newliTxId", newlyTxId)
+	if amount == 0 {
+		amount = signMsg.WatchedTx.Amount
+	}
 	innerTx := &pb.Transaction{
 		WatchedTx: signMsg.WatchedTx.Clone(),
 		NewlyTxId: newlyTxId,
