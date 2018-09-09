@@ -393,6 +393,27 @@ func (node *BraftNode) GetTokenRegisterID(chain string, contractAddr string) *To
 	return nil
 }
 
+// ManualMintRequest 手工铸币结构
+type ManualMintRequest struct {
+	Amount   int64  `json:"amount"`
+	Address  string `json:"address"`
+	Proposal string `json:"proposal"`
+	Chain    uint32 `json:"chain"`
+	Token    uint32 `json:"token"`
+}
+
+// ManualMint 手工铸币
+func (node *BraftNode) ManualMint(mintInfo *ManualMintRequest) {
+	addr := ew.HexToAddress(mintInfo.Address)
+	_, err := node.ethWatcher.GatewayTransaction(node.signer.PubKeyHex, node.signer.PubkeyHash, ew.VOTE_METHOD_MINT,
+		mintInfo.Token, uint64(mintInfo.Amount), addr, "MM_"+mintInfo.Proposal)
+	if err != nil {
+		nodeLogger.Error("manual mint failed", "err", err)
+	} else {
+		nodeLogger.Debug("manual mint success")
+	}
+}
+
 func getHostAndPort(url string) (host, port string) {
 	if url == "" {
 		return

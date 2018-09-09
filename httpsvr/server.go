@@ -72,6 +72,7 @@ func StartHTTP(node *node.BraftNode, user, pwd, endpoint string, allowedOrigins 
 	router.GET("/chainreg", basicAuth(hd.getChainRegisterID, user, pwd))
 	router.POST("/tokenreg", basicAuth(hd.tokenRegister, user, pwd))
 	router.GET("/tokenreg", basicAuth(hd.getTokenRegisterID, user, pwd))
+	router.POST("/manualmint", basicAuth(hd.manualMint, user, pwd))
 	//for wallet app
 	router.GET("/exconfig", basicAuth(hd.getExConfig, user, pwd))
 	router.GET("/mint_payload", basicAuth(hd.getMintPayload, user, pwd))

@@ -383,6 +383,23 @@ func (hd *HTTPHandler) getMintPayload(w http.ResponseWriter, req *http.Request, 
 	}
 }
 
+func (hd *HTTPHandler) manualMint(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	mode := node.GetStartMode()
+	if mode != cluster.ModeNormal && mode != cluster.ModeJoin {
+		fmt.Fprintf(w, "%s", newData(modeErrCode, modeErrMsg, nil))
+		return
+	}
+	body := io.LimitReader(req.Body, maxRequestContentLen)
+	param := new(node.ManualMintRequest)
+	err := json.NewDecoder(body).Decode(param)
+	if err != nil {
+		fmt.Fprintf(w, "%s", newData(paramErrCode, err.Error(), nil))
+		return
+	}
+	hd.node.ManualMint(param)
+	writeResponse(&w, newOKData(nil))
+}
+
 func writeResponse(w *http.ResponseWriter, r interface{}) {
 	rst, err := json.Marshal(r)
 	if err != nil {
