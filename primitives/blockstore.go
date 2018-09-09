@@ -683,6 +683,7 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 		} else if targetChain == "eth" {
 			validateResult := bs.validateEthSignTx(msg)
 			if validateResult != validatePass {
+				SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
 				if validateResult == wrongInputOutput {
 					bsLogger.Error("validate sign tx failed", "sctxid", msg.WatchedTx.Txid)
 					tasks.Add(func() { bs.NewWeakAccuseEvent.Emit(msg.Term) })
@@ -694,6 +695,7 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 
 			_, err := bs.ethWatcher.SendTranxByInput(bs.signer.PubKeyHex, bs.signer.PubkeyHash, msg.NewlyTx.Data)
 			if err != nil {
+				SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
 				bsLogger.Error("sign tx failed", "err", err, "sctxid", msg.WatchedTx.Txid)
 				return
 			}
