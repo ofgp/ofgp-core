@@ -11,6 +11,7 @@ import (
 	"github.com/ofgp/ofgp-core/util/assert"
 	"github.com/ofgp/ofgp-core/util/sort"
 
+	"github.com/ofgp/bitcoinWatcher/coinmanager"
 	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
 
 	"github.com/ofgp/ethwatcher"
@@ -923,6 +924,12 @@ func EthToPbTx(tx *ethwatcher.ExtraBurnData) *WatchedTxInfo {
 		amount := addressInfo.Amount
 		if addressInfo.Amount > leftAmount {
 			amount = leftAmount
+		}
+
+		_, err := coinmanager.DecodeAddress(addressInfo.Address, tx.To)
+		if err != nil {
+			log.Printf("address is illegal, tx: %s", tx.ScTxid)
+			return nil
 		}
 		watchedTx.RechargeList = append(watchedTx.RechargeList, &AddressInfo{
 			Amount:  int64(amount),
