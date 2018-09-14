@@ -804,21 +804,15 @@ func (bn *BraftNode) checkTxOnChain(tx *waitingConfirmTx, wg *sync.WaitGroup) {
 				bn.deleteFromWaiting(tx.msgId)
 			}
 		}
-		/*
-			} else if tx.chainType == "eth" {
-				nodeLogger.Debug("begin filter eth input", "sctxid", tx.msgId, "input", tx.chainTxId)
-				input, _ := hex.DecodeString(tx.chainTxId)
-				chainTxs, _ := bn.ethWatcher.FilterInput(tx.contractId, input)
-				if len(chainTxs) > 0 {
-					if !tx.inMem {
-						tx.setInMem()
-					}
-					if chainTxs[0].Confirmations >= int64(EthConfirms) {
-						bn.txStore.CreateInnerTx(chainTxs[0].ScTxid, tx.msgId)
-						txDelCh <- hash
-					}
-				}
-		*/
+	} else if tx.chainType == "eth" && !tx.inMem {
+		txHash := bn.blockStore.GetETHTxHash(tx.msgId)
+		if len(txHash) > 0 {
+			event, _ := bn.ethWatcher.GetEventByHash(txHash)
+			if event != nil {
+				nodeLogger.Debug("find eth tx event", "sctxid", tx.msgId)
+				tx.setInMem()
+			}
+		}
 	}
 }
 

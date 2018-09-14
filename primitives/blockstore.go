@@ -266,6 +266,11 @@ func (bs *BlockStore) SetFinalAmount(amount int64, scTxID string) {
 	SetFinalAmount(bs.db, amount, scTxID)
 }
 
+// GetETHTxHash 根据proposal获取对应的ETH交易hash
+func (bs *BlockStore) GetETHTxHash(proposal string) string {
+	return GetETHTxHash(bs.db, proposal)
+}
+
 // JustCommitIt 不做校验，直接保存区块
 func (bs *BlockStore) JustCommitIt(blockPack *pb.BlockPack) {
 	mu.Lock()
@@ -693,12 +698,20 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 				return
 			}
 
-			_, err := bs.ethWatcher.SendTranxByInput(bs.signer.PubKeyHex, bs.signer.PubkeyHash, msg.NewlyTx.Data)
-			if err != nil {
-				SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
-				bsLogger.Error("sign tx failed", "err", err, "sctxid", msg.WatchedTx.Txid)
-				return
+			ethTxHash := GetETHTxHash(bs.db, msg.WatchedTx.Txid)
+			// 如果没有发送过approve交易，或者交易没有被链接受，则重试
+			if len(ethTxHash) == 0 || !bs.isETHTxOnChain(ethTxHash) {
+				ethTxHash, err := bs.ethWatcher.SendTranxByInput(bs.signer.PubKeyHex, bs.signer.PubkeyHash, msg.NewlyTx.Data)
+				if err != nil {
+					SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
+					bsLogger.Error("sign tx failed", "err", err, "sctxid", msg.WatchedTx.Txid)
+					return
+				}
+				SetETHTxHash(bs.db, msg.WatchedTx.Txid, ethTxHash)
+			} else {
+				bsLogger.Debug("already send to eth", "sctxid", msg.WatchedTx.Txid)
 			}
+
 			bsLogger.Debug("sign eth tx done")
 			bs.ts.DeleteFresh(msg.WatchedTx.Txid)
 			SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
@@ -708,6 +721,11 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 			})
 		}
 	}
+}
+
+func (bs *BlockStore) isETHTxOnChain(txHash string) bool {
+	event, _ := bs.ethWatcher.GetEventByHash(txHash)
+	return event != nil
 }
 
 func (bs *BlockStore) handleJoinRequest(tasks *task.Queue, msg *pb.JoinRequest) {

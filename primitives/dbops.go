@@ -39,6 +39,7 @@ var (
 	keyHeightPrefix        = []byte("CH")
 	keyProposalPrefix      = []byte("PP")
 	keyFinalAmountPrefix   = []byte("FA")
+	keyETHTxHashPrefix     = []byte("ETHash")
 	// 保存accuse历史记录
 	keyAccuseRecordsPrefix   = []byte("AR")
 	keyClusterSnapshotPrefix = []byte("CS")
@@ -562,4 +563,20 @@ func GetFinalAmount(db *dgwdb.LDBDatabase, scTxID string) int64 {
 		return 0
 	}
 	return amount
+}
+
+// SetETHTxHash 保存proposal对应的ETH交易hash
+func SetETHTxHash(db *dgwdb.LDBDatabase, proposal string, txHash string) {
+	key := append(keyETHTxHashPrefix, []byte(proposal)...)
+	db.Put(key, []byte(txHash))
+}
+
+// GetETHTxHash 根据proposal获取对应的ETH交易hash
+func GetETHTxHash(db *dgwdb.LDBDatabase, proposal string) string {
+	key := append(keyETHTxHashPrefix, []byte(proposal)...)
+	data, err := db.Get(key)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
