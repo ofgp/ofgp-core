@@ -991,12 +991,6 @@ func (bs *BlockStore) validateTxs(blockPack *pb.BlockPack) int {
 						resultChan <- Valid
 					}
 				} else if tx.WatchedTx.To == "eth" {
-					signMsg := GetSignMsg(bs.db, tx.WatchedTx.Txid)
-					if signMsg == nil {
-						bsLogger.Error("validate tx invalid, never signed", "sctxid", tx.WatchedTx.Txid)
-						resultChan <- Invalid
-						return
-					}
 					pushEvent, err := bs.ethWatcher.GetEventByHash(tx.NewlyTxId)
 					if err != nil {
 						bsLogger.Error("validate tx invalid, not found on chain", "sctxid", tx.WatchedTx.Txid)
