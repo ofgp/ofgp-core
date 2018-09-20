@@ -689,6 +689,10 @@ func (bn *BraftNode) dealEthEvent(ev *ew.PushEvent) {
 	switch ev.Method {
 	case ew.TOKEN_METHOD_BURN:
 		// 熔币事件
+		if (ev.Events & ew.TX_STATUS_FAILED) != 0 {
+			nodeLogger.Debug("burn tx is failed in contract")
+			return
+		}
 		burnData := ev.ExtraData.(*ew.ExtraBurnData)
 		nodeLogger.Debug("receive eth burn", "tx", burnData.ScTxid)
 		if burnData.Amount < uint64(bn.minBurnAmount) {
@@ -804,13 +808,23 @@ func (bn *BraftNode) checkTxOnChain(tx *waitingConfirmTx, wg *sync.WaitGroup) {
 				bn.deleteFromWaiting(tx.msgId)
 			}
 		}
-	} else if tx.chainType == "eth" && !tx.inMem {
+	} else if tx.chainType == "eth" {
 		txHash := bn.blockStore.GetETHTxHash(tx.msgId)
 		if len(txHash) > 0 {
 			event, _ := bn.ethWatcher.GetEventByHash(txHash)
 			if event != nil {
-				nodeLogger.Debug("find eth tx event", "sctxid", tx.msgId)
-				tx.setInMem()
+				// 存在发送的交易在链上执行失败的情况，需要重新发送交易
+				if (event.Events & ew.TX_STATUS_FAILED) == 1 {
+					nodeLogger.Debug("contract execute tx failed", "sctxid", tx.msgId)
+					bn.deleteFromWaiting(tx.msgId)
+					signReqMsg := bn.blockStore.GetSignReqMsg(hash)
+					if signReqMsg != nil {
+						bn.clearOnFail(signReqMsg)
+					}
+				} else {
+					nodeLogger.Debug("find eth tx event", "sctxid", tx.msgId)
+					tx.setInMem()
+				}
 			}
 		}
 	}

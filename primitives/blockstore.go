@@ -725,7 +725,7 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 
 func (bs *BlockStore) isETHTxOnChain(txHash string) bool {
 	event, _ := bs.ethWatcher.GetEventByHash(txHash)
-	return event != nil
+	return event != nil && (event.Events&ew.TX_STATUS_FAILED) == 0
 }
 
 func (bs *BlockStore) handleJoinRequest(tasks *task.Queue, msg *pb.JoinRequest) {
@@ -1158,6 +1158,9 @@ func (bs *BlockStore) validateWatchedTx(tx *pb.WatchedTxInfo) bool {
 		} else if tx.From == "eth" {
 			chainTx, err := bs.ethWatcher.GetEventByHash(tx.Txid)
 			if err != nil {
+				return false
+			}
+			if (chainTx.Events & ew.TX_STATUS_FAILED) != 0 {
 				return false
 			}
 			newTx = pb.EthToPbTx(chainTx.ExtraData.(*ew.ExtraBurnData))
