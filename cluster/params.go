@@ -81,7 +81,7 @@ func Init() {
 	ClusterSize = n
 	TotalNodeCount = n
 	MaxFaultyN = (ClusterSize - 1) / 3
-	QuorumN = (ClusterSize+MaxFaultyN)/2 + 1
+	QuorumN = ClusterSize - MaxFaultyN
 	AccuseQuorumN = MaxFaultyN + 1
 }
 
@@ -105,7 +105,7 @@ func InitWithNodeList(nodeList *pb.NodeList) {
 	}
 	TotalNodeCount = len(nodeList.NodeList)
 	MaxFaultyN = (ClusterSize - 1) / 3
-	QuorumN = (ClusterSize+MaxFaultyN)/2 + 1
+	QuorumN = ClusterSize - MaxFaultyN
 	AccuseQuorumN = MaxFaultyN + 1
 }
 
@@ -137,7 +137,7 @@ func AddNode(host string, nodeId int32, pubkey string, pubkeyHash string) {
 	ClusterSize++
 	TotalNodeCount++
 	MaxFaultyN = (ClusterSize - 1) / 3
-	QuorumN = (ClusterSize+MaxFaultyN)/2 + 1
+	QuorumN = ClusterSize - MaxFaultyN
 	AccuseQuorumN = MaxFaultyN + 1
 }
 
@@ -178,7 +178,7 @@ func DeleteNode(nodeId int32) {
 		NodeList[nodeId].IsNormal = false
 		ClusterSize--
 		MaxFaultyN = (ClusterSize - 1) / 3
-		QuorumN = (ClusterSize+MaxFaultyN)/2 + 1
+		QuorumN = ClusterSize - MaxFaultyN
 		AccuseQuorumN = MaxFaultyN + 1
 	}
 }
@@ -191,7 +191,7 @@ func RecoverNode(nodeId int32) {
 	NodeList[nodeId].IsNormal = true
 	ClusterSize++
 	MaxFaultyN = (ClusterSize - 1) / 3
-	QuorumN = (ClusterSize+MaxFaultyN)/2 + 1
+	QuorumN = ClusterSize - MaxFaultyN
 	AccuseQuorumN = MaxFaultyN + 1
 	DelSnapShot()
 }

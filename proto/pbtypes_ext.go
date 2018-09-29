@@ -11,6 +11,7 @@ import (
 	"github.com/ofgp/ofgp-core/util/assert"
 	"github.com/ofgp/ofgp-core/util/sort"
 
+	"github.com/ofgp/bitcoinWatcher/coinmanager"
 	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
 
 	"github.com/ofgp/ethwatcher"
@@ -895,8 +896,8 @@ func BtcToPbTx(tx *btcwatcher.SubTransaction) *WatchedTxInfo {
 
 // EthToPbTx ETH链监听到的交易转pb结构。
 func EthToPbTx(tx *ethwatcher.ExtraBurnData) *WatchedTxInfo {
-	if tx.Amount <= 0 || tx.Fee < 0 || tx.Amount <= tx.Fee {
-		log.Printf("tx amount fee is not right tx:%s", tx.ScTxid)
+	if tx.Amount <= 0 {
+		log.Printf("tx amount is not right tx:%s", tx.ScTxid)
 		return nil
 	}
 
@@ -906,13 +907,15 @@ func EthToPbTx(tx *ethwatcher.ExtraBurnData) *WatchedTxInfo {
 	}
 
 	watchedTx := &WatchedTxInfo{
-		Txid:   tx.ScTxid,
-		Amount: int64(tx.Amount),
-		From:   tx.From,
-		To:     tx.To,
-		Fee:    int64(tx.Fee),
+		Txid:      tx.ScTxid,
+		Amount:    int64(tx.Amount),
+		From:      tx.From,
+		To:        tx.To,
+		TokenFrom: tx.TokenFrom,
+		TokenTo:   tx.TokenTo,
+		Fee:       0,
 	}
-	leftAmount := tx.Amount - tx.Fee
+	leftAmount := tx.Amount
 	for _, addressInfo := range tx.RechargeList {
 		if addressInfo.Amount <= 0 {
 			log.Printf("addrres:%s amount is <=0 tx:%s", addressInfo.Address, tx.ScTxid)
@@ -921,6 +924,12 @@ func EthToPbTx(tx *ethwatcher.ExtraBurnData) *WatchedTxInfo {
 		amount := addressInfo.Amount
 		if addressInfo.Amount > leftAmount {
 			amount = leftAmount
+		}
+
+		_, err := coinmanager.DecodeAddress(addressInfo.Address, tx.To)
+		if err != nil {
+			log.Printf("address is illegal, tx: %s", tx.ScTxid)
+			return nil
 		}
 		watchedTx.RechargeList = append(watchedTx.RechargeList, &AddressInfo{
 			Amount:  int64(amount),

@@ -270,9 +270,11 @@ func (ts *TxStore) AddFreshWatchedTx(tx *pb.WatchedTxInfo) {
 func (ts *TxStore) GetFreshWatchedTxs() []*WatchedTxInfo {
 	ts.Lock()
 	var rst []*WatchedTxInfo
+	var reAppend []*WatchedTxInfo
 	for _, v := range ts.freshWatchedTxInfo {
 		// 本term内已经确定加签失败的交易，下个term再重新发起
 		if IsSignFailed(ts.db, v.Tx.Txid, ts.currTerm) {
+			reAppend = append(reAppend, v)
 			continue
 		}
 		if ts.HasTxInDB(v.Tx.Txid) || ts.hasTxInMemPool(v.Tx.Txid) { //已从其他节点同步
@@ -284,6 +286,9 @@ func (ts *TxStore) GetFreshWatchedTxs() []*WatchedTxInfo {
 		rst = append(rst, v)
 	}
 	ts.freshWatchedTxInfo = make(map[string]*WatchedTxInfo)
+	for _, v := range reAppend {
+		ts.freshWatchedTxInfo[v.Tx.Txid] = v
+	}
 	ts.Unlock()
 	return rst
 }
@@ -311,7 +316,7 @@ func (ts *TxStore) DeleteWatchedTx(txId string) {
 }
 
 // CreateInnerTx 创建一笔网关本身的交易
-func (ts *TxStore) CreateInnerTx(newlyTxId string, signMsgId string) {
+func (ts *TxStore) CreateInnerTx(newlyTxId string, signMsgId string, amount int64) {
 	signMsg := GetSignMsg(ts.db, signMsgId)
 	if signMsg == nil {
 		bsLogger.Error("create inner tx failed, sign msg not found", "signmsgid", signMsgId,
@@ -320,10 +325,14 @@ func (ts *TxStore) CreateInnerTx(newlyTxId string, signMsgId string) {
 	}
 	bsLogger.Debug("create inner tx", "from", signMsg.WatchedTx.From, "to", signMsg.WatchedTx.To,
 		"sctxid", signMsg.WatchedTx.Txid, "newliTxId", newlyTxId)
+	if amount == 0 {
+		amount = signMsg.WatchedTx.Amount
+	}
 	innerTx := &pb.Transaction{
 		WatchedTx: signMsg.WatchedTx.Clone(),
 		NewlyTxId: newlyTxId,
 		Time:      time.Now().Unix(),
+		Amount:    amount,
 	}
 	// 这个时候监听到的交易已经成功处理并上链了，先清理监听交易缓存
 	ts.Lock()

@@ -255,6 +255,7 @@ func (sd *SyncDaemon) processSimpleSyncUpResponse(rsp *pb.SyncUpResponse, accuse
 			break
 		}
 		bs.JustCommitIt(block)
+		bs.SetNodeTerm(block.Term())
 		height := block.Height()
 		txs := block.Block().Txs
 		if len(txs) > 0 {

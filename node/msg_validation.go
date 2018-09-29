@@ -46,8 +46,7 @@ func checkBlock(block *pb.Block) bool {
 		return false
 	}
 	if block.Type == pb.Block_GENESIS {
-		if !(block.TimestampMs == 0 && block.PrevBlockId == nil && len(block.Txs) == 0 &&
-			checkBchBlockHeader(block.BchBlockHeader) && block.Reconfig == nil) {
+		if !(block.TimestampMs == 1534766888 && block.PrevBlockId == nil && len(block.Txs) == 0 && block.Reconfig == nil) {
 			return false
 		}
 		block.UpdateBlockId()

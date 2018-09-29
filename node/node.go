@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/ofgp/ofgp-core/accuser"
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/crypto"
@@ -82,6 +83,11 @@ func (tx *waitingConfirmTx) isTimeout() bool {
 	return time.Now().After(tx.timestamp.Add(passed))
 }
 
+// GetStartMode 返回startMode
+func GetStartMode() int {
+	return startMode
+}
+
 // BraftNode node主结构, 也是程序启动的入口
 type BraftNode struct {
 	localNodeInfo        cluster.NodeInfo
@@ -100,6 +106,12 @@ type BraftNode struct {
 	waitingConfirmTxs    map[string]*waitingConfirmTx
 	quit                 context.CancelFunc
 	isInReconfig         bool
+
+	mintFeeRate      int64
+	burnFeeRate      int64
+	minBCHMintAmount int64
+	minBTCMintAmount int64
+	minBurnAmount    int64
 
 	signedResultChan  chan *pb.SignedResult //处理sign结果
 	signedResultCache sync.Map
@@ -199,6 +211,14 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 	ld := NewLeader(localNodeInfo, bs, ts, signer, btcWatcher, bchWatcher, ethWatcher, pm)
 	syncDaemon := NewSyncDaemon(db, bs, pm)
 
+	mintFeeRate := viper.GetInt64("BUS.mint_fee_rate")
+	burnFeeRate := viper.GetInt64("BUS.burn_fee_rate")
+	minBCHMintAmount := viper.GetInt64("BUS.min_bch_mint_amount")
+	minBTCMintAmount := viper.GetInt64("BUS.min_btc_mint_amount")
+	minBurnAmount := viper.GetInt64("BUS.min_burn_amount")
+	ld.SetFeeRate(mintFeeRate, burnFeeRate)
+	bs.SetFeeRate(mintFeeRate, burnFeeRate)
+
 	bn := &BraftNode{
 		localNodeInfo:        localNodeInfo,
 		signer:               signer,
@@ -215,6 +235,12 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 		waitingConfirmTxChan: txChan,
 		waitingConfirmTxs:    make(map[string]*waitingConfirmTx),
 		isInReconfig:         false,
+
+		mintFeeRate:      mintFeeRate,
+		burnFeeRate:      burnFeeRate,
+		minBCHMintAmount: minBCHMintAmount,
+		minBTCMintAmount: minBTCMintAmount,
+		minBurnAmount:    minBurnAmount,
 
 		signedResultChan: make(chan *pb.SignedResult),
 	}
@@ -450,6 +476,18 @@ func (bn *BraftNode) Run() {
 	bn.quit = cancel
 	nodeLogger.Debug("begin run node", "startMode", startMode, "watchMode", cluster.ModeWatch)
 
+	// 配置文件修改的回调处理
+	viper.WatchConfig()
+	viper.OnConfigChange(func(e fsnotify.Event) {
+		mintFeeRate := viper.GetInt64("BUS.mint_fee_rate")
+		burnFeeRate := viper.GetInt64("BUS.burn_fee_rate")
+		bn.leader.SetFeeRate(mintFeeRate, burnFeeRate)
+		bn.blockStore.SetFeeRate(mintFeeRate, burnFeeRate)
+		bn.minBCHMintAmount = viper.GetInt64("BUS.min_bch_mint_amount")
+		bn.minBTCMintAmount = viper.GetInt64("BUS.min_btc_mint_amount")
+		bn.minBurnAmount = viper.GetInt64("BUS.min_burn_amount")
+	})
+
 	go bn.txStore.Run(ctx)
 	if startMode != cluster.ModeWatch && startMode != cluster.ModeTest {
 		go bn.accuser.Run(ctx)
@@ -538,6 +576,7 @@ func (bn *BraftNode) voteDaemon(ctx context.Context) {
 				vote, err = pb.MakeVote(nodeTerm, bn.blockStore.GetVotie(),
 					bn.localNodeInfo.Id, bn.signer)
 				if err != nil {
+					nodeLogger.Error("make vote failed", "err", err)
 					timer.Reset(timerInterval)
 					continue
 				}
@@ -620,10 +659,18 @@ func (bn *BraftNode) watchNewTx(ctx context.Context) {
 			if !bn.checkSubTx(tx) {
 				continue
 			}
+			if tx.Amount < bn.minBCHMintAmount {
+				nodeLogger.Debug("amount is less than minimal amount", "sctxid", tx.ScTxid)
+				continue
+			}
 			watchedTx = pb.BtcToPbTx(tx)
 		case tx := <-btcTxChan:
 			nodeLogger.Debug("receive btc tx", "tx", tx)
 			if !bn.checkSubTx(tx) {
+				continue
+			}
+			if tx.Amount < bn.minBTCMintAmount {
+				nodeLogger.Debug("amount is less than minimal amount", "sctxid", tx.ScTxid)
 				continue
 			}
 			watchedTx = pb.BtcToPbTx(tx)
@@ -642,8 +689,16 @@ func (bn *BraftNode) dealEthEvent(ev *ew.PushEvent) {
 	switch ev.Method {
 	case ew.TOKEN_METHOD_BURN:
 		// 熔币事件
+		if (ev.Events & ew.TX_STATUS_FAILED) != 0 {
+			nodeLogger.Debug("burn tx is failed in contract")
+			return
+		}
 		burnData := ev.ExtraData.(*ew.ExtraBurnData)
 		nodeLogger.Debug("receive eth burn", "tx", burnData.ScTxid)
+		if burnData.Amount < uint64(bn.minBurnAmount) {
+			nodeLogger.Debug("amount is less than minimal amount", "sctxid", burnData.ScTxid)
+			return
+		}
 		watchedTx := pb.EthToPbTx(burnData)
 		if watchedTx != nil {
 			bn.txStore.AddWatchedTx(watchedTx)
@@ -660,7 +715,8 @@ func (bn *BraftNode) dealEthEvent(ev *ew.PushEvent) {
 		nodeLogger.Debug("receive eth create", "tx", ev.Tx.TxHash.Hex())
 		go func(scTxId string) {
 			bn.mu.Lock()
-			bn.txStore.CreateInnerTx(ev.Tx.TxHash.Hex(), scTxId)
+			amount := bn.blockStore.GetFinalAmount(scTxId)
+			bn.txStore.CreateInnerTx(ev.Tx.TxHash.Hex(), scTxId, amount)
 			delete(bn.waitingConfirmTxs, mintData.Proposal)
 			bn.mu.Unlock()
 		}(mintData.Proposal)
@@ -735,7 +791,8 @@ func (bn *BraftNode) checkTxOnChain(tx *waitingConfirmTx, wg *sync.WaitGroup) {
 				tx.setInMem()
 			}
 			if chainTx.Confirmations >= uint64(BchConfirms) {
-				bn.txStore.CreateInnerTx(chainTx.ScTxid, tx.msgId)
+				amount := bn.blockStore.GetFinalAmount(chainTx.ScTxid)
+				bn.txStore.CreateInnerTx(chainTx.ScTxid, tx.msgId, amount)
 				bn.deleteFromWaiting(tx.msgId)
 			}
 		}
@@ -746,25 +803,30 @@ func (bn *BraftNode) checkTxOnChain(tx *waitingConfirmTx, wg *sync.WaitGroup) {
 				tx.setInMem()
 			}
 			if chainTx.Confirmations >= uint64(BtcConfirms) {
-				bn.txStore.CreateInnerTx(chainTx.ScTxid, tx.msgId)
+				amount := bn.blockStore.GetFinalAmount(chainTx.ScTxid)
+				bn.txStore.CreateInnerTx(chainTx.ScTxid, tx.msgId, amount)
 				bn.deleteFromWaiting(tx.msgId)
 			}
 		}
-		/*
-			} else if tx.chainType == "eth" {
-				nodeLogger.Debug("begin filter eth input", "sctxid", tx.msgId, "input", tx.chainTxId)
-				input, _ := hex.DecodeString(tx.chainTxId)
-				chainTxs, _ := bn.ethWatcher.FilterInput(tx.contractId, input)
-				if len(chainTxs) > 0 {
-					if !tx.inMem {
-						tx.setInMem()
+	} else if tx.chainType == "eth" {
+		txHash := bn.blockStore.GetETHTxHash(tx.msgId)
+		if len(txHash) > 0 {
+			event, _ := bn.ethWatcher.GetEventByHash(txHash)
+			if event != nil {
+				// 存在发送的交易在链上执行失败的情况，需要重新发送交易
+				if (event.Events & ew.TX_STATUS_FAILED) == 1 {
+					nodeLogger.Debug("contract execute tx failed", "sctxid", tx.msgId)
+					bn.deleteFromWaiting(tx.msgId)
+					signReqMsg := bn.blockStore.GetSignReqMsg(hash)
+					if signReqMsg != nil {
+						bn.clearOnFail(signReqMsg)
 					}
-					if chainTxs[0].Confirmations >= int64(EthConfirms) {
-						bn.txStore.CreateInnerTx(chainTxs[0].ScTxid, tx.msgId)
-						txDelCh <- hash
-					}
+				} else {
+					nodeLogger.Debug("find eth tx event", "sctxid", tx.msgId)
+					tx.setInMem()
 				}
-		*/
+			}
+		}
 	}
 }
 
@@ -889,7 +951,7 @@ type JoinMsg struct {
 }
 
 // InitJoin 根据引导节点做集群配置信息的初始化
-func InitJoin() *JoinMsg {
+func InitJoin(startMode int32) *JoinMsg {
 	initHost := viper.GetString("DGW.init_node_host")
 	joinMsg := new(JoinMsg)
 	if len(initHost) == 0 {

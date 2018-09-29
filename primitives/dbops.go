@@ -38,6 +38,8 @@ var (
 	keySignedResultPrefix  = []byte("SR")
 	keyHeightPrefix        = []byte("CH")
 	keyProposalPrefix      = []byte("PP")
+	keyFinalAmountPrefix   = []byte("FA")
+	keyETHTxHashPrefix     = []byte("ETHash")
 	// 保存accuse历史记录
 	keyAccuseRecordsPrefix   = []byte("AR")
 	keyClusterSnapshotPrefix = []byte("CS")
@@ -157,7 +159,6 @@ func GetVotie(db *dgwdb.LDBDatabase) *pb.Votie {
 
 // JustCommitIt 不做任何校验，直接保存区块
 func JustCommitIt(db *dgwdb.LDBDatabase, blockPack *pb.BlockPack) {
-	bsLogger.Debug("write block to db", "txcount", len(blockPack.Block().Txs), "height", blockPack.Height())
 	bpBytes, err := proto.Marshal(blockPack)
 	assert.ErrorIsNil(err)
 	hBytes := util.I64ToBytes(blockPack.Height())
@@ -541,4 +542,41 @@ func GetETHBlockTxIndex(db *dgwdb.LDBDatabase) int {
 		return 0
 	}
 	return res
+}
+
+// SetFinalAmount 保存扣除手续费后的最终金额
+func SetFinalAmount(db *dgwdb.LDBDatabase, amount int64, scTxID string) {
+	key := append(keyFinalAmountPrefix, []byte(scTxID)...)
+	data := util.I64ToBytes(amount)
+	db.Put(key, data)
+}
+
+// GetFinalAmount 获取最终金额
+func GetFinalAmount(db *dgwdb.LDBDatabase, scTxID string) int64 {
+	key := append(keyFinalAmountPrefix, []byte(scTxID)...)
+	data, err := db.Get(key)
+	if err != nil {
+		return 0
+	}
+	amount, err := util.BytesToI64(data)
+	if err != nil {
+		return 0
+	}
+	return amount
+}
+
+// SetETHTxHash 保存proposal对应的ETH交易hash
+func SetETHTxHash(db *dgwdb.LDBDatabase, proposal string, txHash string) {
+	key := append(keyETHTxHashPrefix, []byte(proposal)...)
+	db.Put(key, []byte(txHash))
+}
+
+// GetETHTxHash 根据proposal获取对应的ETH交易hash
+func GetETHTxHash(db *dgwdb.LDBDatabase, proposal string) string {
+	key := append(keyETHTxHashPrefix, []byte(proposal)...)
+	data, err := db.Get(key)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }

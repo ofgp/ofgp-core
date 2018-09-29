@@ -54,6 +54,9 @@ type BlockStore struct {
 	prepareCache map[int64]map[int64][]*pb.PrepareMsg
 	commitCache  map[int64]map[int64][]*pb.CommitMsg
 
+	mintFeeRate int64
+	burnFeeRate int64
+
 	NeedSyncUpEvent            *util.Event
 	NewInitedEvent             *util.Event
 	NewPreparedEvent           *util.Event
@@ -110,11 +113,24 @@ func NewBlockStore(db *dgwdb.LDBDatabase, ts *TxStore, btcWatcher *btcwatcher.Mo
 	}
 }
 
+// SetFeeRate 设置网关的交易手续费
+func (bs *BlockStore) SetFeeRate(mintFeeRate int64, burnFeeRate int64) {
+	bs.mintFeeRate = mintFeeRate
+	bs.burnFeeRate = burnFeeRate
+}
+
 // GetNodeTerm 获取节点的term
 func (bs *BlockStore) GetNodeTerm() int64 {
 	mu.RLock()
 	defer mu.RUnlock()
 	return GetNodeTerm(bs.db)
+}
+
+// SetNodeTerm 保存节点的term
+func (bs *BlockStore) SetNodeTerm(term int64) {
+	mu.Lock()
+	SetNodeTerm(bs.db, term)
+	mu.Unlock()
 }
 
 // GetFresh 获取节点当前共识中的block
@@ -240,6 +256,21 @@ func (bs *BlockStore) GetBlockByHash(blockID *crypto.Digest256) *pb.BlockPack {
 	return GetCommitByID(bs.db, blockID)
 }
 
+// GetFinalAmount 获取最终金额
+func (bs *BlockStore) GetFinalAmount(scTxID string) int64 {
+	return GetFinalAmount(bs.db, scTxID)
+}
+
+// SetFinalAmount 保存最终金额
+func (bs *BlockStore) SetFinalAmount(amount int64, scTxID string) {
+	SetFinalAmount(bs.db, amount, scTxID)
+}
+
+// GetETHTxHash 根据proposal获取对应的ETH交易hash
+func (bs *BlockStore) GetETHTxHash(proposal string) string {
+	return GetETHTxHash(bs.db, proposal)
+}
+
 // JustCommitIt 不做校验，直接保存区块
 func (bs *BlockStore) JustCommitIt(blockPack *pb.BlockPack) {
 	mu.Lock()
@@ -273,10 +304,8 @@ func (bs *BlockStore) GetClusterSnapshot(address string) *cluster.Snapshot {
 func (bs *BlockStore) HandleInitMsg(msg *pb.InitMsg) {
 	deferredEvents := &task.Queue{}
 	mu.Lock()
-	bsLogger.Debug("get lock, begin handle init msg")
 	bs.handleInitMsg(deferredEvents, msg)
 	mu.Unlock()
-	bsLogger.Debug("free lock, handle init msg done")
 	deferredEvents.ExecAll()
 }
 
@@ -284,10 +313,8 @@ func (bs *BlockStore) HandleInitMsg(msg *pb.InitMsg) {
 func (bs *BlockStore) HandlePrepareMsg(msg *pb.PrepareMsg) {
 	deferredEvents := &task.Queue{}
 	mu.Lock()
-	bsLogger.Debug("get lock, begin handle prepare msg")
 	bs.handlePrepareMsg(deferredEvents, msg)
 	mu.Unlock()
-	bsLogger.Debug("free lock, handle prepare msg done")
 	deferredEvents.ExecAll()
 }
 
@@ -295,10 +322,8 @@ func (bs *BlockStore) HandlePrepareMsg(msg *pb.PrepareMsg) {
 func (bs *BlockStore) HandleCommitMsg(msg *pb.CommitMsg) {
 	deferredEvents := &task.Queue{}
 	mu.Lock()
-	bsLogger.Debug("get lock, begin handle commit msg")
 	bs.handleCommitMsg(deferredEvents, msg)
 	mu.Unlock()
-	bsLogger.Debug("free lock, handle commit msg done")
 	deferredEvents.ExecAll()
 }
 
@@ -663,6 +688,7 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 		} else if targetChain == "eth" {
 			validateResult := bs.validateEthSignTx(msg)
 			if validateResult != validatePass {
+				SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
 				if validateResult == wrongInputOutput {
 					bsLogger.Error("validate sign tx failed", "sctxid", msg.WatchedTx.Txid)
 					tasks.Add(func() { bs.NewWeakAccuseEvent.Emit(msg.Term) })
@@ -672,11 +698,20 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 				return
 			}
 
-			_, err := bs.ethWatcher.SendTranxByInput(bs.signer.PubKeyHex, bs.signer.PubkeyHash, msg.NewlyTx.Data)
-			if err != nil {
-				bsLogger.Error("sign tx failed", "err", err, "sctxid", msg.WatchedTx.Txid)
-				return
+			ethTxHash := GetETHTxHash(bs.db, msg.WatchedTx.Txid)
+			// 如果没有发送过approve交易，或者交易没有被链接受，则重试
+			if len(ethTxHash) == 0 || !bs.isETHTxOnChain(ethTxHash) {
+				ethTxHash, err := bs.ethWatcher.SendTranxByInput(bs.signer.PubKeyHex, bs.signer.PubkeyHash, msg.NewlyTx.Data)
+				if err != nil {
+					SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
+					bsLogger.Error("sign tx failed", "err", err, "sctxid", msg.WatchedTx.Txid)
+					return
+				}
+				SetETHTxHash(bs.db, msg.WatchedTx.Txid, ethTxHash)
+			} else {
+				bsLogger.Debug("already send to eth", "sctxid", msg.WatchedTx.Txid)
 			}
+
 			bsLogger.Debug("sign eth tx done")
 			bs.ts.DeleteFresh(msg.WatchedTx.Txid)
 			SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
@@ -686,6 +721,11 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 			})
 		}
 	}
+}
+
+func (bs *BlockStore) isETHTxOnChain(txHash string) bool {
+	event, _ := bs.ethWatcher.GetEventByHash(txHash)
+	return event != nil && (event.Events&ew.TX_STATUS_FAILED) == 0
 }
 
 func (bs *BlockStore) handleJoinRequest(tasks *task.Queue, msg *pb.JoinRequest) {
@@ -951,12 +991,6 @@ func (bs *BlockStore) validateTxs(blockPack *pb.BlockPack) int {
 						resultChan <- Valid
 					}
 				} else if tx.WatchedTx.To == "eth" {
-					signMsg := GetSignMsg(bs.db, tx.WatchedTx.Txid)
-					if signMsg == nil {
-						bsLogger.Error("validate tx invalid, never signed", "sctxid", tx.WatchedTx.Txid)
-						resultChan <- Invalid
-						return
-					}
 					pushEvent, err := bs.ethWatcher.GetEventByHash(tx.NewlyTxId)
 					if err != nil {
 						bsLogger.Error("validate tx invalid, not found on chain", "sctxid", tx.WatchedTx.Txid)
@@ -1017,7 +1051,8 @@ func (bs *BlockStore) validateBtcSignTx(req *pb.SignTxRequest, newlyTx *wire.Msg
 	for idx, recharge := range req.WatchedTx.RechargeList {
 		txOut := newlyTx.TxOut[idx]
 		outAddress := btcfunc.ExtractPkScriptAddr(txOut.PkScript, req.WatchedTx.To)
-		if outAddress != recharge.Address || txOut.Value != recharge.Amount {
+		amount := recharge.Amount - recharge.Amount*bs.burnFeeRate/10000
+		if outAddress != recharge.Address || txOut.Value != amount {
 			bsLogger.Warn("recharge address or amount not equal", "outAddr", outAddress,
 				"rechargeAddr", recharge.Address, "outAmount", txOut.Value, "rechargeAmount", recharge.Amount)
 			return wrongInputOutput
@@ -1073,7 +1108,9 @@ func (bs *BlockStore) validateEthSignTx(req *pb.SignTxRequest) int {
 		return wrongInputOutput
 	}
 	addredss := ew.HexToAddress(req.WatchedTx.RechargeList[0].Address)
-	localInput, _ := bs.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, req.WatchedTx.TokenTo, uint64(req.WatchedTx.RechargeList[0].Amount),
+	amount := req.WatchedTx.RechargeList[0].Amount - req.WatchedTx.RechargeList[0].Amount*bs.mintFeeRate/10000
+	bsLogger.Debug("validateETHSignTx final amount", "amount", amount, "feerate", bs.mintFeeRate, "oriamount", req.WatchedTx.RechargeList[0].Amount)
+	localInput, _ := bs.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, req.WatchedTx.TokenTo, uint64(amount),
 		addredss, req.WatchedTx.Txid)
 	if !bytes.Equal(req.NewlyTx.Data, localInput) {
 		bsLogger.Warn("verify eth input not passed", "sctxid", req.WatchedTx.Txid)
@@ -1121,6 +1158,9 @@ func (bs *BlockStore) validateWatchedTx(tx *pb.WatchedTxInfo) bool {
 		} else if tx.From == "eth" {
 			chainTx, err := bs.ethWatcher.GetEventByHash(tx.Txid)
 			if err != nil {
+				return false
+			}
+			if (chainTx.Events & ew.TX_STATUS_FAILED) != 0 {
 				return false
 			}
 			newTx = pb.EthToPbTx(chainTx.ExtraData.(*ew.ExtraBurnData))

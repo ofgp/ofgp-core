@@ -395,7 +395,7 @@ func TestAddWatchedTx(t *testing.T) {
 	req, _ := http.NewRequest("POST", "/watchedtx", reqReader)
 	w := httptest.NewRecorder()
 	router := httprouter.New()
-	router.POST("/watchedtx", handler.AddTx)
+	router.POST("/watchedtx", handler.addTx)
 	router.ServeHTTP(w, req)
 	if status := w.Code; status != http.StatusOK {
 		t.Errorf("expected status code: %d, got: %d", http.StatusOK, status)

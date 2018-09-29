@@ -28,6 +28,10 @@ func init() {
 	apiLog = dgwLog.New("debug", "http_api")
 }
 
+func (node *BraftNode) GetNodeTerm() int64 {
+	return node.blockStore.GetNodeTerm()
+}
+
 func (node *BraftNode) GetBlockHeight() int64 {
 	return node.blockStore.GetCommitHeight()
 }
@@ -80,6 +84,7 @@ type TxView struct {
 	ToFee       int64    `json:"to_fee"`
 	TokenCode   uint32   `json:"token_code"`
 	AppCode     uint32   `json:"app_code"`
+	FinalAmount int64    `json:"final_amount"` //扣除手续费后的金额
 }
 
 func getHexString(digest *crypto.Digest256) string {
@@ -124,6 +129,8 @@ func (node *BraftNode) createTxView(blockID string, height int64, tx *pb.Transac
 		Time:        tx.Time,
 		TokenCode:   tokenCode,
 		AppCode:     appCode,
+		FinalAmount: tx.Amount,
+		DGWFee:      watchedTx.Amount - tx.Amount,
 	}
 	return txView
 }
@@ -284,8 +291,9 @@ type NodeView struct {
 
 func (node *BraftNode) GetNodes() []NodeView {
 	nodeViews := make([]NodeView, 0)
-	leaderID := cluster.LeaderNodeOfTerm(node.leader.term)
-	apiLog.Error("leader id is", "leaderID", leaderID, "term is ", node.leader.term)
+	term := node.GetNodeTerm()
+	leaderID := cluster.LeaderNodeOfTerm(term)
+	apiLog.Error("leader id is", "leaderID", leaderID, "term is ", term)
 	nodeRuntimeInfos := node.peerManager.GetNodeRuntimeInfos()
 	for _, node := range cluster.NodeList {
 		var isLeader bool
@@ -297,6 +305,8 @@ func (node *BraftNode) GetNodes() []NodeView {
 		ethH, btcH, bchH, LeaderCnt := getHeightAndLeaderCnt(node.Id, nodeRuntimeInfos)
 		if isLeader && LeaderCnt > 0 {
 			firedCnt = LeaderCnt - 1
+		} else {
+			firedCnt = LeaderCnt
 		}
 		nodeView := NodeView{
 			IP:        ip,
@@ -328,8 +338,8 @@ type ChainRegID struct {
 type TokenRegInfo struct {
 	ContractAddr string `json:"contract_addr"`
 	Chain        string `json:"chain"`
-	ReceptChain  int32  `json:"recept_chain"`
-	ReceptToken  int32  `json:"recept_token"`
+	ReceptChain  uint32 `json:"recept_chain"`
+	ReceptToken  uint32 `json:"recept_token"`
 }
 
 type TokenRegID struct {
@@ -353,7 +363,7 @@ func (node *BraftNode) ChainRegister(regInfo *ChainRegInfo) {
 // GetChainRegisterID 查询链注册结果，如果成功，返回chainID，否则返回0
 func (node *BraftNode) GetChainRegisterID(newChain string, targetChain string) *ChainRegID {
 	if targetChain == "eth" {
-		chainID := node.ethWatcher.GetChainCode(targetChain)
+		chainID := node.ethWatcher.GetChainCode(newChain)
 		return &ChainRegID{ChainID: chainID}
 	}
 	return nil
@@ -363,8 +373,9 @@ func (node *BraftNode) GetChainRegisterID(newChain string, targetChain string) *
 func (node *BraftNode) TokenRegister(regInfo *TokenRegInfo) {
 	if regInfo.Chain == "eth" {
 		// 调用ETH合约接口注册新的token合约, proposal就使用contractaddr
+		addr := ew.HexToAddress(regInfo.ContractAddr)
 		_, err := node.ethWatcher.GatewayTransaction(node.signer.PubKeyHex, node.signer.PubkeyHash, ew.VOTE_METHOD_ADDAPP,
-			regInfo.ContractAddr, regInfo.ReceptChain, regInfo.ReceptToken, "TR_"+regInfo.ContractAddr)
+			addr, regInfo.ReceptChain, regInfo.ReceptToken, "TR_"+regInfo.ContractAddr)
 		if err != nil {
 			nodeLogger.Error("register new token failed", "err", err, "contractaddr", regInfo.ContractAddr)
 		} else {
@@ -380,6 +391,27 @@ func (node *BraftNode) GetTokenRegisterID(chain string, contractAddr string) *To
 		return &TokenRegID{TokenID: tokenID}
 	}
 	return nil
+}
+
+// ManualMintRequest 手工铸币结构
+type ManualMintRequest struct {
+	Amount   int64  `json:"amount"`
+	Address  string `json:"address"`
+	Proposal string `json:"proposal"`
+	Chain    uint32 `json:"chain"`
+	Token    uint32 `json:"token"`
+}
+
+// ManualMint 手工铸币
+func (node *BraftNode) ManualMint(mintInfo *ManualMintRequest) {
+	addr := ew.HexToAddress(mintInfo.Address)
+	_, err := node.ethWatcher.GatewayTransaction(node.signer.PubKeyHex, node.signer.PubkeyHash, ew.VOTE_METHOD_MINT,
+		mintInfo.Token, uint64(mintInfo.Amount), addr, "MM_"+mintInfo.Proposal)
+	if err != nil {
+		nodeLogger.Error("manual mint failed", "err", err)
+	} else {
+		nodeLogger.Debug("manual mint success")
+	}
 }
 
 func getHostAndPort(url string) (host, port string) {
@@ -401,4 +433,29 @@ func getHeightAndLeaderCnt(nodeID int32,
 		return
 	}
 	return apiData.EthHeight, apiData.BtcHeight, apiData.BchHeight, apiData.LeaderCnt
+}
+
+// GetMinBCHMintAmount 返回BCH链铸币的最小金额
+func (node *BraftNode) GetMinBCHMintAmount() int64 {
+	return node.minBCHMintAmount
+}
+
+// GetMinBTCMintAmount 返回BCH链铸币的最小金额
+func (node *BraftNode) GetMinBTCMintAmount() int64 {
+	return node.minBTCMintAmount
+}
+
+// GetMinBurnAmount 返回熔币的最小金额
+func (node *BraftNode) GetMinBurnAmount() int64 {
+	return node.minBurnAmount
+}
+
+// GetMintFeeRate 返回铸币的手续费
+func (node *BraftNode) GetMintFeeRate() int64 {
+	return node.mintFeeRate
+}
+
+// GetBurnFeeRate 返回熔币的手续费
+func (node *BraftNode) GetBurnFeeRate() int64 {
+	return node.burnFeeRate
 }
