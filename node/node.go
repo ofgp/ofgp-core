@@ -977,11 +977,15 @@ func InitJoin(startMode int32) *JoinMsg {
 
 	nodeLogger.Debug("init join get multisig address", "btc", multiSig.BtcAddress, "bch", multiSig.BchAddress)
 	cluster.InitWithNodeList(nodeList)
-
-	//创建当前集群的快照
-	cluster.CreateSnapShot()
-	localID := len(nodeList.NodeList)
-	joinMsg.LocalID = int32(localID)
+	if startMode == cluster.ModeJoin {
+		//创建当前集群的快照
+		cluster.CreateSnapShot()
+		localID := int32(len(nodeList.NodeList))
+		joinMsg.LocalID = localID
+	} else {
+		// 观察节点或者是测试节点
+		joinMsg.LocalID = 0
+	}
 	return joinMsg
 }
 
