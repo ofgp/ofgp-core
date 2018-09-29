@@ -126,9 +126,15 @@ func run(ctx *cli.Context) {
 	if startMode == cluster.ModeNormal {
 		cluster.Init()
 		nodeInfo = cluster.NodeList[nodeId]
-	} else {
+		if int(nodeId) >= len(cluster.NodeList) {
+			panic(fmt.Sprintf("Invalid nodeid %d cluster size %d", nodeId, len(cluster.NodeList)))
+		}
+	} else if startMode == cluster.ModeJoin {
 		joinMsg = node.InitJoin(startMode)
 		nodeId = joinMsg.LocalID
+		if int(nodeId) > len(cluster.NodeList) {
+			panic(fmt.Sprintf("join invalid nodeid %d cluster size %d", nodeId, len(cluster.NodeList)))
+		}
 		host := viper.GetString("DGW.local_host")
 		if host == "" {
 			panic("join not set local_host")
@@ -149,7 +155,7 @@ func run(ctx *cli.Context) {
 
 	httpPort := viper.GetInt("DGW.local_http_port")
 	cros := []string{}
-	if nodeId < 0 || int(nodeId) >= len(cluster.NodeList) {
+	if nodeId < 0 {
 		panic(fmt.Sprintf("Invalid nodeid %d cluster size %d", nodeId, len(cluster.NodeList)))
 	}
 

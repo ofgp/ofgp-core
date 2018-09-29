@@ -1205,6 +1205,7 @@ func RunNew(nodeInfo cluster.NodeInfo, multiSigInfos []cluster.MultiSigInfo) (*g
 	}()
 
 	if startMode == cluster.ModeJoin {
+		nodeLogger.Debug("join before", "clusterSize", cluster.TotalNodeCount, "quorum", cluster.QuorumN)
 		//start sync
 		braftNode.syncBeforeSendJoinReq(nodeInfo.Id)
 		//send join request that check synced
@@ -1216,7 +1217,7 @@ func RunNew(nodeInfo cluster.NodeInfo, multiSigInfos []cluster.MultiSigInfo) (*g
 		braftNode.blockStore.SaveSnapshot(*cluster.ClusterSnapshot)
 
 		onJoined(nodeInfo)
-
+		nodeLogger.Debug("join after", "clusterSize", cluster.TotalNodeCount, "quorum", cluster.QuorumN)
 		latestMultiSig := getFederationAddress()
 
 		cluster.SetCurrMultiSig(latestMultiSig)
