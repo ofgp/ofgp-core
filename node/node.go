@@ -918,13 +918,16 @@ func InitJoin() *JoinMsg {
 
 	//创建当前集群的快照
 	cluster.CreateSnapShot()
-
-	cluster.AddNode(viper.GetString("DGW.local_host"), int32(len(nodeList.NodeList)), viper.GetString("DGW.local_pubkey"),
-		viper.GetString("KEYSTORE.local_pubkey_hash"))
-	localID := int32(len(nodeList.NodeList))
-	saveNewConfig(localID)
-	joinMsg.LocalID = localID
+	localID := len(nodeList.NodeList)
+	joinMsg.LocalID = int32(localID)
 	return joinMsg
+}
+
+// OnJoined 节点加更改本地NodeList
+func onJoined(nodeInfo cluster.NodeInfo) {
+	cluster.AddNodeInfo(nodeInfo)
+	// localID := int32(len(nodeList.NodeList))
+	saveNewConfig(nodeInfo.Id)
 }
 
 // saveNewConfig 保存最新的配置信息到viper，以及持久化到配置文件
@@ -1118,7 +1121,7 @@ func (bn *BraftNode) changeFederationAddrs(latest cluster.MultiSigInfo, multiSig
 }
 
 // RunNew 启动server
-func RunNew(id int32, multiSigInfos []cluster.MultiSigInfo) (*grpc.Server, *BraftNode) {
+func RunNew(nodeInfo cluster.NodeInfo, multiSigInfos []cluster.MultiSigInfo) (*grpc.Server, *BraftNode) {
 	startMode = viper.GetInt("DGW.start_mode")
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", viper.Get("DGW.local_p2p_port")))
 	if err != nil {
@@ -1127,7 +1130,8 @@ func RunNew(id int32, multiSigInfos []cluster.MultiSigInfo) (*grpc.Server, *Braf
 
 	// 默认的流控大小为64K，改成1M和10M
 	grpcServer := grpc.NewServer(grpc.InitialWindowSize(1048576), grpc.InitialConnWindowSize(10485760))
-	braftNode := NewBraftNode(cluster.NodeList[id])
+
+	braftNode := NewBraftNode(nodeInfo)
 	nodeLogger.Debug("begin run braft node", "bchconfirm", BchConfirms, "ethconfirm", EthConfirms)
 	pb.RegisterBraftServer(grpcServer, braftNode)
 	go func() {
@@ -1136,7 +1140,7 @@ func RunNew(id int32, multiSigInfos []cluster.MultiSigInfo) (*grpc.Server, *Braf
 
 	if startMode == cluster.ModeJoin {
 		//start sync
-		braftNode.syncBeforeSendJoinReq(id)
+		braftNode.syncBeforeSendJoinReq(nodeInfo.Id)
 		//send join request that check synced
 		braftNode.sendJoinCheckSyncedRequest()
 		if !checkJoinSuccess() {
@@ -1144,6 +1148,8 @@ func RunNew(id int32, multiSigInfos []cluster.MultiSigInfo) (*grpc.Server, *Braf
 		}
 		cluster.SetMultiSigSnapshot(multiSigInfos)
 		braftNode.blockStore.SaveSnapshot(*cluster.ClusterSnapshot)
+
+		onJoined(nodeInfo)
 
 		latestMultiSig := getFederationAddress()
 

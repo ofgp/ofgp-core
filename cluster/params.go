@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"sync"
 	"time"
@@ -138,6 +139,34 @@ func AddNode(host string, nodeId int32, pubkey string, pubkeyHash string) {
 	MaxFaultyN = (ClusterSize - 1) / 3
 	QuorumN = (ClusterSize+MaxFaultyN)/2 + 1
 	AccuseQuorumN = MaxFaultyN + 1
+}
+
+// AddNodeInfo 将node加入节点列表
+func AddNodeInfo(nodeInfo NodeInfo) {
+	NodeList = append(NodeList, nodeInfo)
+	ClusterSize++
+	TotalNodeCount++
+	MaxFaultyN = (ClusterSize - 1) / 3
+	QuorumN = (ClusterSize+MaxFaultyN)/2 + 1
+	AccuseQuorumN = MaxFaultyN + 1
+}
+
+// NewNodeInfo 创建Node
+func NewNodeInfo(host string, nodeId int32, pubkey string, pubkeyHash string) NodeInfo {
+	if nodeId != int32(TotalNodeCount) {
+		log.Println("nodeId is not equal totalNodeCnt")
+		return NodeInfo{}
+	}
+	signer := crypto.NewSecureSigner(pubkey, pubkeyHash)
+	nodeInfo := NodeInfo{
+		Id:        nodeId,
+		Name:      fmt.Sprintf("server%d", nodeId),
+		Url:       host,
+		PublicKey: signer.Pubkey,
+		IsNormal:  true,
+	}
+	NodeSigners[nodeId] = signer
+	return nodeInfo
 }
 
 // DeleteNode 把相应ID的节点的状态标记为删除

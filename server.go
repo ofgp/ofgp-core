@@ -120,11 +120,29 @@ func run(ctx *cli.Context) {
 	accuser.AccuseInterval = viper.GetInt64("accuse_interval")
 
 	var joinMsg *node.JoinMsg
+	var nodeInfo cluster.NodeInfo
 	if startMode == cluster.ModeNormal {
 		cluster.Init()
+		nodeInfo = cluster.NodeList[nodeId]
 	} else {
 		joinMsg = node.InitJoin()
 		nodeId = joinMsg.LocalID
+		host := viper.GetString("DGW.local_host")
+		if host == "" {
+			panic("join not set local_host")
+		}
+		pubKey := viper.GetString("DGW.local_pubkey")
+		if pubKey == "" {
+			panic("join not set local_pubkey")
+		}
+		pubKeyHash := viper.GetString("KEYSTORE.local_pubkey_hash")
+		if pubKeyHash == "" {
+			panic("join not set pubkeyHash")
+		}
+		nodeInfo = cluster.NewNodeInfo(host, nodeId, pubKey, pubKeyHash)
+	}
+	if nodeInfo.Url == "" {
+		panic("get no node info")
 	}
 	viper.WatchConfig()
 
@@ -138,7 +156,7 @@ func run(ctx *cli.Context) {
 	if joinMsg != nil && len(joinMsg.MultiSigInfos) > 0 {
 		multiSigs = joinMsg.MultiSigInfos
 	}
-	_, node := node.RunNew(nodeId, multiSigs)
+	_, node := node.RunNew(nodeInfo, multiSigs)
 
 	user := viper.GetString("DGW.local_http_user")
 	pwd := viper.GetString("DGW.local_http_pwd")
