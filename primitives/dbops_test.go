@@ -2,14 +2,17 @@ package primitives_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"io/ioutil"
 	"math/big"
 	"os"
 	"testing"
 
 	"github.com/ofgp/ofgp-core/cluster"
+	"github.com/ofgp/ofgp-core/crypto"
 	"github.com/ofgp/ofgp-core/dgwdb"
 	"github.com/ofgp/ofgp-core/primitives"
+	pb "github.com/ofgp/ofgp-core/proto"
 )
 
 func InitDB(dir string) (*dgwdb.LDBDatabase, error) {
@@ -100,4 +103,77 @@ func TestETHHeight(t *testing.T) {
 	if index != dbIndex {
 		t.Error("eth index not equal")
 	}
+}
+
+func TestGetBlocks(t *testing.T) {
+	// tmpDir, err := ioutil.TempDir("", "braft")
+	// if err != nil {
+	// 	t.Fatalf("create tempdir failed, err: %v", err)
+	// }
+	// defer os.RemoveAll(tmpDir)
+	tmpDir := "/Users/bitmain/leveldb_data_test"
+	db, err := InitDB(tmpDir)
+	if err != nil {
+		t.Fatalf("init db failed, err: %v", err)
+	}
+	bytes := make([]byte, 32)
+	for i := 0; i < 32; i++ {
+		bytes[i] = byte(i)
+	}
+	id0, err := crypto.NewDigest256(bytes)
+	if err != nil {
+		t.Errorf("create err:%v", err)
+		return
+	}
+	block0 := &pb.Block{
+		Id: id0,
+		Txs: []*pb.Transaction{
+			&pb.Transaction{
+				Id: id0,
+				WatchedTx: &pb.WatchedTxInfo{
+					Txid: "txOld0",
+				},
+			},
+		},
+	}
+	bytes[0] = 1
+	id1, _ := crypto.NewDigest256(bytes)
+	block1 := &pb.Block{
+		Id: id1,
+		Txs: []*pb.Transaction{
+			&pb.Transaction{
+				Id: id1,
+				WatchedTx: &pb.WatchedTxInfo{
+					Txid: "txOld1",
+				},
+			},
+		},
+	}
+	blockPack0 := &pb.BlockPack{
+		Init: &pb.InitMsg{
+			Term:   0,
+			Height: 0,
+			Block:  block0,
+		},
+		Prepares: nil,
+		Commits:  nil,
+	}
+	blockPack1 := &pb.BlockPack{
+		Init: &pb.InitMsg{
+			Term:   0,
+			Height: 1,
+			Block:  block1,
+		},
+		Prepares: nil,
+		Commits:  nil,
+	}
+	primitives.JustCommitIt(db, blockPack0)
+	primitives.JustCommitIt(db, blockPack1)
+	res0 := primitives.GetCommitByHeight(db, 0)
+	data0, _ := json.Marshal(res0.Block())
+	t.Logf("block0:%s", data0)
+
+	res1 := primitives.GetCommitByHeight(db, 1)
+	data1, _ := json.Marshal(res1.Block())
+	t.Logf("block1:%s", data1)
 }
