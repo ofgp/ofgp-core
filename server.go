@@ -123,16 +123,40 @@ func run(ctx *cli.Context) {
 	accuser.AccuseInterval = viper.GetInt64("DGW.accuse_interval")
 
 	var joinMsg *node.JoinMsg
+	var nodeInfo cluster.NodeInfo
 	if startMode == cluster.ModeNormal {
 		cluster.Init()
-	} else {
+		nodeInfo = cluster.NodeList[nodeId]
+		if int(nodeId) >= len(cluster.NodeList) {
+			panic(fmt.Sprintf("Invalid nodeid %d cluster size %d", nodeId, len(cluster.NodeList)))
+		}
+	} else if startMode == cluster.ModeJoin {
 		joinMsg = node.InitJoin(startMode)
 		nodeId = joinMsg.LocalID
+		if int(nodeId) > len(cluster.NodeList) {
+			panic(fmt.Sprintf("join invalid nodeid %d cluster size %d", nodeId, len(cluster.NodeList)))
+		}
+		host := viper.GetString("DGW.local_host")
+		if host == "" {
+			panic("join not set local_host")
+		}
+		pubKey := viper.GetString("DGW.local_pubkey")
+		if pubKey == "" {
+			panic("join not set local_pubkey")
+		}
+		pubKeyHash := viper.GetString("KEYSTORE.local_pubkey_hash")
+		if pubKeyHash == "" {
+			panic("join not set pubkeyHash")
+		}
+		nodeInfo = cluster.NewNodeInfo(host, nodeId, pubKey, pubKeyHash)
+	}
+	if nodeInfo.Url == "" {
+		panic("get no node info")
 	}
 
 	httpPort := viper.GetInt("DGW.local_http_port")
 	cros := []string{}
-	if nodeId < 0 || int(nodeId) >= len(cluster.NodeList) {
+	if nodeId < 0 {
 		panic(fmt.Sprintf("Invalid nodeid %d cluster size %d", nodeId, len(cluster.NodeList)))
 	}
 
@@ -140,7 +164,7 @@ func run(ctx *cli.Context) {
 	if joinMsg != nil && len(joinMsg.MultiSigInfos) > 0 {
 		multiSigs = joinMsg.MultiSigInfos
 	}
-	_, node := node.RunNew(nodeId, multiSigs)
+	_, node := node.RunNew(nodeInfo, multiSigs)
 
 	user := viper.GetString("DGW.local_http_user")
 	pwd := viper.GetString("DGW.local_http_pwd")
