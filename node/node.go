@@ -15,12 +15,15 @@ import (
 	"sync"
 	"time"
 
+	"eosc/eoswatcher"
+
 	"github.com/fsnotify/fsnotify"
 	"github.com/ofgp/ofgp-core/accuser"
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/crypto"
 	"github.com/ofgp/ofgp-core/dgwdb"
 	"github.com/ofgp/ofgp-core/log"
+	"github.com/ofgp/ofgp-core/price"
 	"github.com/ofgp/ofgp-core/primitives"
 	pb "github.com/ofgp/ofgp-core/proto"
 	"github.com/ofgp/ofgp-core/util"
@@ -49,7 +52,12 @@ var (
 	BtcConfirms       int //check 交易确认数
 	BchConfirms       int
 	EthConfirms       int
+	EOSConfirms       int
 	ConfirmTolerance  time.Duration
+	// CheckOnChainCur 链上验证并发数
+	CheckOnChainCur int
+	// CheckOnChainInterval 探测时间间隔
+	CheckOnChainInterval time.Duration
 )
 
 type waitingConfirmTx struct {
@@ -90,16 +98,18 @@ func GetStartMode() int {
 
 // BraftNode node主结构, 也是程序启动的入口
 type BraftNode struct {
-	localNodeInfo        cluster.NodeInfo
-	signer               *crypto.SecureSigner
-	blockStore           *primitives.BlockStore
-	txStore              *primitives.TxStore
-	peerManager          *cluster.PeerManager
-	accuser              *accuser.Accuser
-	leader               *Leader
-	bchWatcher           *btcwatcher.MortgageWatcher
-	btcWatcher           *btcwatcher.MortgageWatcher
-	ethWatcher           *ew.Client
+	localNodeInfo cluster.NodeInfo
+	signer        *crypto.SecureSigner
+	blockStore    *primitives.BlockStore
+	txStore       *primitives.TxStore
+	peerManager   *cluster.PeerManager
+	accuser       *accuser.Accuser
+	leader        *Leader
+	bchWatcher    *btcwatcher.MortgageWatcher
+	btcWatcher    *btcwatcher.MortgageWatcher
+	ethWatcher    *ew.Client
+	eosWatcher    *eoswatcher.EOSWatcher
+
 	syncDaemon           *SyncDaemon
 	mu                   sync.Mutex
 	waitingConfirmTxChan chan *waitingConfirmTx
@@ -167,6 +177,7 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 		btcWatcher *btcwatcher.MortgageWatcher
 		bchWatcher *btcwatcher.MortgageWatcher
 		ethWatcher *ew.Client
+		eosWatcher *eoswatcher.EOSWatcher
 		err        error
 	)
 	if startMode != cluster.ModeWatch {
@@ -190,10 +201,17 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 		if err != nil {
 			panic(fmt.Sprintf("new eth watcher failed, err: %v", err))
 		}
+
+		eosURL := viper.GetString("DGW.eos_client_url")
+		if len(eosURL) > 0 {
+			eosWatcher = eoswatcher.NewEosWatcher(eosURL, viper.GetString("KEYSTORE.local_pubkey_hash"), viper.GetString("DGW.eos_contract_account"), "destroytoken", "createtoken")
+		}
 	}
 
+	priceTool := price.NewPriceTool(viper.GetString("DGW.price_server"))
+
 	ts := primitives.NewTxStore(db)
-	bs := primitives.NewBlockStore(db, ts, btcWatcher, bchWatcher, ethWatcher, signer, localNodeInfo.Id)
+	bs := primitives.NewBlockStore(db, ts, btcWatcher, bchWatcher, ethWatcher, eosWatcher, priceTool, signer, localNodeInfo.Id)
 
 	//交易相关连接池大小
 	txConnPoolSize := viper.GetInt("DGW.tx_conn_pool_size")
@@ -208,7 +226,7 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 	pm := cluster.NewPeerManager(localNodeInfo.Id, txConnPoolSize, blockPoolSize)
 
 	ac := accuser.NewAccuser(localNodeInfo, signer, pm)
-	ld := NewLeader(localNodeInfo, bs, ts, signer, btcWatcher, bchWatcher, ethWatcher, pm)
+	ld := NewLeader(localNodeInfo, bs, ts, signer, btcWatcher, bchWatcher, ethWatcher, eosWatcher, priceTool, pm)
 	syncDaemon := NewSyncDaemon(db, bs, pm)
 
 	mintFeeRate := viper.GetInt64("BUS.mint_fee_rate")
@@ -230,6 +248,7 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 		bchWatcher:           bchWatcher,
 		btcWatcher:           btcWatcher,
 		ethWatcher:           ethWatcher,
+		eosWatcher:           eosWatcher,
 		syncDaemon:           syncDaemon,
 		mu:                   sync.Mutex{},
 		waitingConfirmTxChan: txChan,
@@ -637,15 +656,24 @@ func (bn *BraftNode) watchNewTx(ctx context.Context) {
 	btcTxChan := bn.btcWatcher.GetTxChan()
 
 	ethEventChan := make(chan *ew.PushEvent)
-	height := bn.blockStore.GetETHBlockHeight()
-	index := bn.blockStore.GetETHBlockTxIndex()
-	if height == nil {
+	ethHeight := bn.blockStore.GetETHBlockHeight()
+	ethIndex := bn.blockStore.GetETHBlockTxIndex()
+	if ethHeight == nil {
 		h := viper.GetInt64("DGW.eth_height")
-		height = big.NewInt(h)
-		index = viper.GetInt("DGW.eth_tran_idx")
+		ethHeight = big.NewInt(h)
+		ethIndex = viper.GetInt("DGW.eth_tran_idx")
 	}
+	bn.ethWatcher.StartWatch(*ethHeight, ethIndex, ethEventChan)
 
-	bn.ethWatcher.StartWatch(*height, index, ethEventChan)
+	eosTxChan := make(chan *eoswatcher.EOSPushEvent)
+	eosHeight := bn.blockStore.GetEOSBlockHeight()
+	eosIndex := bn.blockStore.GetEOSBlockTxIndex()
+	if eosHeight == 0 {
+		eosHeight = viper.GetInt64("DGW.eos_height")
+		eosIndex = viper.GetInt("DGW.eos_tran_idx")
+	}
+	bn.eosWatcher.StartWatch(uint32(eosHeight), uint32(eosIndex), eosTxChan)
+
 	var watchedTx *pb.WatchedTxInfo
 	for {
 		if bn.isInReconfig {
@@ -676,6 +704,8 @@ func (bn *BraftNode) watchNewTx(ctx context.Context) {
 			watchedTx = pb.BtcToPbTx(tx)
 		case ev := <-ethEventChan:
 			bn.dealEthEvent(ev)
+		case ev := <-eosTxChan:
+			bn.dealEOSEvent(ev)
 		case <-ctx.Done():
 			return
 		}
@@ -734,6 +764,15 @@ func (bn *BraftNode) dealEthEvent(ev *ew.PushEvent) {
 	// 保存ETH监听的高度和高度内的交易索引
 	bn.blockStore.SetETHBlockHeight(ev.Tx.BlockNumber)
 	bn.blockStore.SetETHBlockTxIndex(ev.Tx.TxIndex)
+}
+
+func (bn *BraftNode) dealEOSEvent(ev *eoswatcher.EOSPushEvent) {
+	watchedTx := pb.EOSToPbTx(ev)
+	if watchedTx != nil {
+		bn.txStore.AddWatchedTx(watchedTx)
+	} else {
+		nodeLogger.Debug("create watched tx failed", "tx", ev.GetTxID())
+	}
 }
 
 func (bn *BraftNode) dealWaitingChan(ctx context.Context) {
@@ -827,6 +866,19 @@ func (bn *BraftNode) checkTxOnChain(tx *waitingConfirmTx, wg *sync.WaitGroup) {
 				}
 			}
 		}
+	} else if tx.chainType == "eos" {
+		nodeLogger.Debug("begin filter eos tx", "sctxid", tx.msgId)
+		chainTx, _ := bn.eosWatcher.GetEventByTxid(tx.chainTxId)
+		if chainTx != nil {
+			if !tx.inMem {
+				tx.setInMem()
+			}
+			nodeLogger.Debug("eos block height", "lastirr", bn.eosWatcher.LastIrreversibleBlockNum, "txheight", chainTx.GetHeight())
+			if int64(bn.eosWatcher.LastIrreversibleBlockNum) >= chainTx.GetHeight() {
+				bn.txStore.CreateInnerTx(tx.chainTxId, tx.msgId, 0)
+				bn.deleteFromWaiting(tx.msgId)
+			}
+		}
 	}
 }
 
@@ -844,12 +896,6 @@ func (bn *BraftNode) getWaitingTxCh() (<-chan *waitingConfirmTx, int) {
 
 	return txCh, txSize
 }
-
-//链上验证并发数
-var CheckOnChainCur int
-
-//探测时间间隔
-var CheckOnChainInterval time.Duration
 
 func (bn *BraftNode) watchWatingConfirmTx(ctx context.Context) {
 	if CheckOnChainInterval == 0 {

@@ -28,6 +28,8 @@ var (
 	keyLeaveNodeInfo       = []byte("LeaveNodeInfo")
 	keyETHHeight           = []byte("ETHHeight")
 	keyETHTxIndex          = []byte("ETHTxIndex")
+	keyEOSHeight           = []byte("EOSHeight")
+	keyEOSTxIndex          = []byte("EOSTxIndex")
 	keyMultiSigSnapshot    = []byte("MS")
 	keyCommitChainPrefix   = []byte("B")
 	keyCommitHsByIdsPrefix = []byte("H")
@@ -534,6 +536,44 @@ func SetETHBlockTxIndex(db *dgwdb.LDBDatabase, index int) {
 // GetETHBlockTxIndex 获取上次ETH监听到的区块里面的哪一笔交易
 func GetETHBlockTxIndex(db *dgwdb.LDBDatabase) int {
 	data, err := db.Get(keyETHTxIndex)
+	if err != nil {
+		return 0
+	}
+	res, err := strconv.Atoi(string(data))
+	if err != nil {
+		return 0
+	}
+	return res
+}
+
+// SetEOSBlockHeight 保存EOS监听到的高度
+func SetEOSBlockHeight(db *dgwdb.LDBDatabase, height int64) {
+	data := util.I64ToBytes(height)
+	db.Put(keyEOSHeight, data)
+}
+
+// GetEOSBlockHeight 获取EOS监听到的高度
+func GetEOSBlockHeight(db *dgwdb.LDBDatabase) int64 {
+	data, err := db.Get(keyEOSHeight)
+	if err != nil {
+		return 0
+	}
+	height, err := util.BytesToI64(data)
+	if err != nil {
+		return 0
+	}
+	return height
+}
+
+// SetEOSBlockTxIndex 保存上次EOS监听到的区块里面的哪一笔交易
+func SetEOSBlockTxIndex(db *dgwdb.LDBDatabase, index int) {
+	data := strconv.Itoa(index)
+	db.Put(keyEOSTxIndex, []byte(data))
+}
+
+// GetEOSBlockTxIndex 获取上次EOS监听到的区块里面的哪一笔交易
+func GetEOSBlockTxIndex(db *dgwdb.LDBDatabase) int {
+	data, err := db.Get(keyEOSTxIndex)
 	if err != nil {
 		return 0
 	}

@@ -2,9 +2,12 @@ package node
 
 import (
 	"bytes"
+	"encoding/hex"
 	"sync"
 	"time"
 
+	"github.com/eoscanada/eos-go"
+	"github.com/eoscanada/eos-go/ecc"
 	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
 
 	"github.com/ofgp/ofgp-core/cluster"
@@ -92,6 +95,63 @@ func (node *BraftNode) clearOnFail(signReq *pb.SignTxRequest) {
 	}
 }
 
+func (node *BraftNode) sendTxToChain(chain string, tx []byte, sigs [][][]byte, signResult *pb.SignedResult, signReq *pb.SignTxRequest) {
+	if chain == "btc" || chain == "bch" {
+		var watcher *btcwatcher.MortgageWatcher
+		buf := bytes.NewBuffer(tx)
+		newlyTx := new(wire.MsgTx)
+		err := newlyTx.Deserialize(buf)
+		assert.ErrorIsNil(err)
+
+		if chain == "bch" {
+			watcher = node.bchWatcher
+		} else {
+			watcher = node.btcWatcher
+		}
+
+		newlyTxHash := newlyTx.TxHash().String()
+		ok := watcher.MergeSignTx(newlyTx, sigs)
+		if !ok {
+			leaderLogger.Error("merge sign tx failed", "sctxid", signResult.TxId)
+			node.clearOnFail(signReq)
+			return
+		}
+		start := time.Now().UnixNano()
+		_, err = watcher.SendTx(newlyTx)
+		end := time.Now().UnixNano()
+		leaderLogger.Debug("sendBchtime", "time", (end-start)/1e6)
+		if err != nil {
+			leaderLogger.Error("send signed tx to bch failed", "err", err, "sctxid", signResult.TxId)
+		}
+		node.blockStore.SignedTxEvent.Emit(newlyTxHash, signResult.TxId, signResult.To, signReq.WatchedTx.TokenTo)
+	} else {
+		var tmpSigs []*ecc.Signature
+		for _, sig := range sigs {
+			s := &ecc.Signature{}
+			s.UnmarshalJSON(sig[0])
+			tmpSigs = append(tmpSigs, s)
+		}
+		pack := &eos.PackedTransaction{
+			Compression:       0,
+			PackedTransaction: signReq.NewlyTx.Data,
+		}
+		transfer, _ := pack.Unpack()
+		newlyTx, err := node.eosWatcher.MergeSignedTx(transfer, tmpSigs...)
+		if err != nil {
+			leaderLogger.Error("merge sign tx failed", "sctxid", signResult.TxId)
+			node.clearOnFail(signReq)
+			return
+		}
+		_, err = node.eosWatcher.SendTx(newlyTx)
+		if err != nil {
+			leaderLogger.Error("send signed tx to eos failed", "err", err, "sctxid", signResult.TxId)
+		}
+		newlyTxHash := hex.EncodeToString(newlyTx.ID())
+		node.blockStore.SignedTxEvent.Emit(newlyTxHash, signResult.TxId, signResult.To, signReq.WatchedTx.TokenTo)
+	}
+}
+
+/*
 func (node *BraftNode) sendTxToChain(newlyTx *wire.MsgTx, watcher *btcwatcher.MortgageWatcher,
 	sigs [][][]byte, signResult *pb.SignedResult, signReq *pb.SignTxRequest) {
 
@@ -112,10 +172,9 @@ func (node *BraftNode) sendTxToChain(newlyTx *wire.MsgTx, watcher *btcwatcher.Mo
 	}
 	node.blockStore.SignedTxEvent.Emit(newlyTxHash, signResult.TxId, signResult.To, signReq.WatchedTx.TokenTo)
 }
+*/
 
 func (node *BraftNode) doSave(msg *pb.SignedResult) {
-	var watcher *btcwatcher.MortgageWatcher
-
 	if node.blockStore.IsSignFailed(msg.TxId, msg.Term) {
 		leaderLogger.Debug("signmsg is failed in this term", "sctxid", msg.TxId, "term", msg.Term)
 		return
@@ -150,17 +209,9 @@ func (node *BraftNode) doSave(msg *pb.SignedResult) {
 		}
 		return
 	}
-	buf := bytes.NewBuffer(signReqMsg.NewlyTx.Data)
-	newlyTx := new(wire.MsgTx)
-	err := newlyTx.Deserialize(buf)
-	assert.ErrorIsNil(err)
-	if msg.To == "bch" {
-		watcher = node.bchWatcher
-	} else {
-		watcher = node.btcWatcher
-	}
+
 	if msg.Code == pb.CodeType_SIGNED {
-		if !watcher.VerifySign(newlyTx, msg.Data, cluster.NodeList[msg.NodeId].PublicKey) {
+		if !node.verifySign(msg.To, signReqMsg.NewlyTx.Data, msg.Data, msg.NodeId) {
 			leaderLogger.Error("verify sign tx failed", "from", msg.NodeId, "sctxid", msg.TxId)
 			cache.addErrCnt()
 		} else {
@@ -202,7 +253,7 @@ func (node *BraftNode) doSave(msg *pb.SignedResult) {
 				}
 			}
 			// sendTxToChain的时间可能会比较长，因为涉及到链上交易，所以需要提前把锁释放
-			node.sendTxToChain(newlyTx, watcher, sigs, msg, signReqMsg)
+			node.sendTxToChain(msg.To, signReqMsg.NewlyTx.Data, sigs, msg, signReqMsg)
 		}
 	} else if cache.getErrCnt() > accuseQuorumN {
 		// 本次交易确认失败，清理缓存的数据，避免干扰后续的重试
@@ -231,6 +282,52 @@ func (node *BraftNode) saveSignedResult(ctx context.Context) {
 			return
 		}
 	}
+}
+
+func (node *BraftNode) verifySign(chain string, tx []byte, sig [][]byte, nodeID int32) bool {
+	if chain == "bch" || chain == "btc" {
+		var watcher *btcwatcher.MortgageWatcher
+		buf := bytes.NewBuffer(tx)
+		newlyTx := new(wire.MsgTx)
+		err := newlyTx.Deserialize(buf)
+		if err != nil {
+			return false
+		}
+		if chain == "bch" {
+			watcher = node.bchWatcher
+		} else {
+			watcher = node.btcWatcher
+		}
+		if !watcher.VerifySign(newlyTx, sig, cluster.NodeList[nodeID].PublicKey) {
+			leaderLogger.Error("verify sign tx failed", "from", nodeID)
+			return false
+		}
+		return true
+	} else if chain == "eos" {
+		pack := &eos.PackedTransaction{
+			Compression:       0,
+			PackedTransaction: tx,
+		}
+		transfer, err := pack.Unpack()
+		if err != nil {
+			leaderLogger.Error("verify sign tx failed", "from", nodeID, "err", err)
+			return false
+		}
+		eosSig := &ecc.Signature{}
+		err = eosSig.UnmarshalJSON(sig[0])
+		if err != nil {
+			leaderLogger.Error("verify sign tx failed", "from", nodeID, "err", err)
+			return false
+		}
+		pubkey, err := node.eosWatcher.GetPublickeyFromTx(transfer, eosSig)
+		if err != nil {
+			leaderLogger.Error("verify sign tx failed", "from", nodeID, "err", err)
+			return false
+		}
+		nodePubkey, _ := node.eosWatcher.NewPublicKey(hex.EncodeToString(cluster.NodeList[nodeID].PublicKey))
+		return pubkey.String() == nodePubkey.String()
+	}
+	return false
 }
 
 func (node *BraftNode) hasTxInWaitting(scTxID string) bool {

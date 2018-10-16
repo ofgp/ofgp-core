@@ -111,6 +111,7 @@ func run(ctx *cli.Context) {
 	node.BtcConfirms = viper.GetInt("DGW.btc_confirms")
 	node.BchConfirms = viper.GetInt("DGW.bch_confirms")
 	node.EthConfirms = viper.GetInt("DGW.eth_confirms")
+	node.EOSConfirms = viper.GetInt("DGW.eos_confirms")
 	//交易处理超时时间
 	node.ConfirmTolerance = viper.GetDuration("DGW.confirm_tolerance")
 	//交易链上check并发数

@@ -1,6 +1,8 @@
 package proto
 
 import (
+	"encoding/json"
+	"eosc/eoswatcher"
 	"fmt"
 	"log"
 	"strings"
@@ -940,6 +942,36 @@ func EthToPbTx(tx *ethwatcher.ExtraBurnData) *WatchedTxInfo {
 			break
 		}
 	}
+	return watchedTx
+}
+
+type eosMemo struct {
+	Address string `json:"address"`
+}
+
+// EOSToPbTx EOS链监听到的交易转pb结构
+func EOSToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
+	if tx.GetAmount() <= 0 {
+		return nil
+	}
+	watchedTx := &WatchedTxInfo{
+		Txid:      tx.GetTxID(),
+		Amount:    int64(tx.GetAmount()),
+		From:      "eos",
+		To:        "bch",
+		TokenFrom: 1,
+		TokenTo:   1,
+		Fee:       0,
+	}
+	memo := &eosMemo{}
+	err := json.Unmarshal(tx.GetData(), memo)
+	if err != nil {
+		return nil
+	}
+	watchedTx.RechargeList = append(watchedTx.RechargeList, &AddressInfo{
+		Amount:  int64(tx.GetAmount()),
+		Address: memo.Address,
+	})
 	return watchedTx
 }
 
