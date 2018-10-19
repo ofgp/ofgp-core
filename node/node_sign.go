@@ -213,7 +213,7 @@ func (node *BraftNode) doSave(msg *pb.SignedResult) {
 
 func (node *BraftNode) saveSignedResult(ctx context.Context) {
 	//定期删除已处理的sign
-	clearCh := time.NewTicker(cluster.BlockInterval).C
+	clearCh := time.NewTicker(3 * cluster.BlockInterval).C
 	for {
 		select {
 		case msg := <-node.signedResultChan:
