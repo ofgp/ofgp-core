@@ -960,7 +960,7 @@ func EOSToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 		From:      "eos",
 		To:        "bch",
 		TokenFrom: 1,
-		TokenTo:   1,
+		TokenTo:   0,
 		Fee:       0,
 	}
 	memo := &eosMemo{}

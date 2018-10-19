@@ -26,18 +26,19 @@ type Output struct {
 
 // Proposal 提案内容
 type Proposal struct {
-	Data       []Output `json:"data"`
-	Chain      string   `json:"chain"`
+	Data  []Output `json:"data"`
+	Chain string   `json:"chain"`
 }
 
 type DistributionInfo struct {
-	Proposal Proposal `json:"proposal"`
+	Proposal   Proposal `json:"proposal"`
 	CreateTime string   `json:"create_time"`
 	Status     int      `json:"status"`
-} 
+}
 
 func (d *DistributionInfo) ID() string {
-	data, err := 
+	data, _ := json.Marshal(d.Proposal)
+	return hex.EncodeToString(md5.Sum(data)[:])
 }
 
 // ProposalManager 提案管理，负责增删查
