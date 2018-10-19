@@ -190,7 +190,10 @@ func (ts *TxStore) Run(ctx context.Context) {
 			//sign时去主链获取的主链交易不需要重新加入
 			if _, exist := ts.watchedTxInfo[watchedTx.Txid]; !exist {
 				ts.watchedTxInfo[watchedTx.Txid] = wtx
-				ts.freshWatchedTxInfo[watchedTx.Txid] = wtx
+				// 多签资产分配交易不用放到fresh队列里面，由rpc接口手动触发
+				if !watchedTx.IsDistributionTx() {
+					ts.freshWatchedTxInfo[watchedTx.Txid] = wtx
+				}
 			}
 			ts.Unlock()
 		case watchedTx := <-ts.addFreshChan:

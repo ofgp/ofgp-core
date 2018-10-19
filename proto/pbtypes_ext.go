@@ -980,6 +980,11 @@ func (tx *WatchedTxInfo) IsTransferTx() bool {
 	return tx.From == tx.To && strings.HasPrefix(tx.Txid, "TransferTx")
 }
 
+// IsDistributionTx 判断WatchedTxInfo是否是一个分配多签资产的交易
+func (tx *WatchedTxInfo) IsDistributionTx() bool {
+	return tx.From == tx.To && strings.HasPrefix(tx.Txid, "DistributionTx")
+}
+
 // MakeSignTxMsg 创建一个SignTxMsg并返回
 func MakeSignTxMsg(term int64, nodeId int32, watchedTx *WatchedTxInfo, newlyTx *NewlyTx,
 	multisigAddress string, signer *crypto.SecureSigner) (*SignTxRequest, error) {
