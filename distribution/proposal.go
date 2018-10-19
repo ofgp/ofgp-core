@@ -28,8 +28,16 @@ type Output struct {
 type Proposal struct {
 	Data       []Output `json:"data"`
 	Chain      string   `json:"chain"`
+}
+
+type DistributionInfo struct {
+	Proposal Proposal `json:"proposal"`
 	CreateTime string   `json:"create_time"`
 	Status     int      `json:"status"`
+} 
+
+func (d *DistributionInfo) ID() string {
+	data, err := 
 }
 
 // ProposalManager 提案管理，负责增删查
