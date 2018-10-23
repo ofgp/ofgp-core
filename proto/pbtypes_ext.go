@@ -949,18 +949,18 @@ type eosMemo struct {
 	Address string `json:"address"`
 }
 
-// EOSToPbTx EOS链监听到的交易转pb结构
-func EOSToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
+// XINToPbTx XIN链监听到的交易转pb结构
+func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 	if tx.GetAmount() <= 0 {
 		return nil
 	}
 	watchedTx := &WatchedTxInfo{
 		Txid:      tx.GetTxID(),
 		Amount:    int64(tx.GetAmount()),
-		From:      "eos",
+		From:      "xin",
 		To:        "bch",
 		TokenFrom: 1,
-		TokenTo:   1,
+		TokenTo:   0,
 		Fee:       0,
 	}
 	memo := &eosMemo{}
@@ -978,6 +978,11 @@ func EOSToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 // IsTransferTx 判断WatchedTxInfo是否是一个多签地址的资产转移的交易
 func (tx *WatchedTxInfo) IsTransferTx() bool {
 	return tx.From == tx.To && strings.HasPrefix(tx.Txid, "TransferTx")
+}
+
+// IsDistributionTx 判断WatchedTxInfo是否是一个分配多签资产的交易
+func (tx *WatchedTxInfo) IsDistributionTx() bool {
+	return tx.From == tx.To && strings.HasPrefix(tx.Txid, "DistributionTx")
 }
 
 // MakeSignTxMsg 创建一个SignTxMsg并返回

@@ -86,9 +86,13 @@ func (node *BraftNode) clearOnFail(signReq *pb.SignTxRequest) {
 	node.signedResultCache.Delete(signReq.WatchedTx.Txid)
 
 	if !signReq.WatchedTx.IsTransferTx() && !node.hasTxInWaitting(signReq.WatchedTx.Txid) {
-		leaderLogger.Debug("add to fresh queue", "sctxid", signReq.WatchedTx.Txid)
 		node.blockStore.DeleteSignReqMsg(signReq.WatchedTx.Txid)
-		node.txStore.AddFreshWatchedTx(signReq.WatchedTx)
+		if signReq.WatchedTx.IsDistributionTx() {
+			node.proposalManager.SetFailed(signReq.WatchedTx.Txid[14:])
+		} else {
+			leaderLogger.Debug("add to fresh queue", "sctxid", signReq.WatchedTx.Txid)
+			node.txStore.AddFreshWatchedTx(signReq.WatchedTx)
+		}
 	} else {
 		leaderLogger.Debug("just delete watched tx", "sctxid", signReq.WatchedTx.Txid, "is_in_waiting", node.hasTxInWaitting(signReq.WatchedTx.Txid))
 		node.txStore.DeleteWatchedTx(signReq.WatchedTx.Txid)
@@ -136,15 +140,15 @@ func (node *BraftNode) sendTxToChain(chain string, tx []byte, sigs [][][]byte, s
 			PackedTransaction: signReq.NewlyTx.Data,
 		}
 		transfer, _ := pack.Unpack()
-		newlyTx, err := node.eosWatcher.MergeSignedTx(transfer, tmpSigs...)
+		newlyTx, err := node.xinWatcher.MergeSignedTx(transfer, tmpSigs...)
 		if err != nil {
 			leaderLogger.Error("merge sign tx failed", "sctxid", signResult.TxId)
 			node.clearOnFail(signReq)
 			return
 		}
-		_, err = node.eosWatcher.SendTx(newlyTx)
+		_, err = node.xinWatcher.SendTx(newlyTx)
 		if err != nil {
-			leaderLogger.Error("send signed tx to eos failed", "err", err, "sctxid", signResult.TxId)
+			leaderLogger.Error("send signed tx to xin failed", "err", err, "sctxid", signResult.TxId)
 		}
 		newlyTxHash := hex.EncodeToString(newlyTx.ID())
 		node.blockStore.SignedTxEvent.Emit(newlyTxHash, signResult.TxId, signResult.To, signReq.WatchedTx.TokenTo)
@@ -303,7 +307,7 @@ func (node *BraftNode) verifySign(chain string, tx []byte, sig [][]byte, nodeID 
 			return false
 		}
 		return true
-	} else if chain == "eos" {
+	} else if chain == "xin" {
 		pack := &eos.PackedTransaction{
 			Compression:       0,
 			PackedTransaction: tx,
@@ -313,18 +317,18 @@ func (node *BraftNode) verifySign(chain string, tx []byte, sig [][]byte, nodeID 
 			leaderLogger.Error("verify sign tx failed", "from", nodeID, "err", err)
 			return false
 		}
-		eosSig := &ecc.Signature{}
-		err = eosSig.UnmarshalJSON(sig[0])
+		xinSig := &ecc.Signature{}
+		err = xinSig.UnmarshalJSON(sig[0])
 		if err != nil {
 			leaderLogger.Error("verify sign tx failed", "from", nodeID, "err", err)
 			return false
 		}
-		pubkey, err := node.eosWatcher.GetPublickeyFromTx(transfer, eosSig)
+		pubkey, err := node.xinWatcher.GetPublickeyFromTx(transfer, xinSig)
 		if err != nil {
 			leaderLogger.Error("verify sign tx failed", "from", nodeID, "err", err)
 			return false
 		}
-		nodePubkey, _ := node.eosWatcher.NewPublicKey(hex.EncodeToString(cluster.NodeList[nodeID].PublicKey))
+		nodePubkey, _ := node.xinWatcher.NewPublicKey(hex.EncodeToString(cluster.NodeList[nodeID].PublicKey))
 		return pubkey.String() == nodePubkey.String()
 	}
 	return false

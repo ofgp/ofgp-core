@@ -194,3 +194,7 @@ func newBCHMintPayload(chain string, app uint32, addr string) (*mintPayloadRespo
 	}
 	return &mintPayloadResponse{hex.EncodeToString(payload)}, nil
 }
+
+type addProposalResponse struct {
+	ProposalID string `json:"proposal_id"`
+}
