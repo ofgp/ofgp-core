@@ -12,6 +12,7 @@ import (
 
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/crypto"
+	"github.com/ofgp/ofgp-core/distribution"
 	"github.com/ofgp/ofgp-core/node"
 
 	"github.com/julienschmidt/httprouter"
@@ -397,6 +398,44 @@ func (hd *HTTPHandler) manualMint(w http.ResponseWriter, req *http.Request, _ ht
 		return
 	}
 	hd.node.ManualMint(param)
+	writeResponse(&w, newOKData(nil))
+}
+
+func (hd *HTTPHandler) addProposal(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
+	body := io.LimitReader(req.Body, maxRequestContentLen)
+	param := new(distribution.Proposal)
+	err := json.NewDecoder(body).Decode(param)
+	if err != nil {
+		fmt.Fprintf(w, "%s", newData(paramErrCode, err.Error(), nil))
+		return
+	}
+	hd.node.AddProposal(param)
+	writeResponse(&w, newOKData(nil))
+}
+
+func (hd *HTTPHandler) getProposal(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	proposalID := params.ByName("proposal_id")
+	di := hd.node.GetProposal(proposalID)
+	writeResponse(&w, newOKData(di))
+}
+
+func (hd *HTTPHandler) getAllProposal(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	diList := hd.node.GetAllProposal()
+	writeResponse(&w, newOKData(diList))
+}
+
+func (hd *HTTPHandler) deleteProposal(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	proposalID := params.ByName("proposal_id")
+	if hd.node.DeleteProposal(proposalID) {
+		writeResponse(&w, newOKData(nil))
+	} else {
+		fmt.Fprintf(w, "%s", newData(sysErrCode, "delete failed", nil))
+	}
+}
+
+func (hd *HTTPHandler) executeProposal(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	proposalID := params.ByName("proposal_id")
+	hd.node.ExecuteProposal(proposalID)
 	writeResponse(&w, newOKData(nil))
 }
 

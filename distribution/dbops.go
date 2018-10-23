@@ -11,8 +11,8 @@ var (
 )
 
 // setDistributionProposal 保存分配提案
-func setDistributionProposal(db *dgwdb.LDBDatabase, proposalID string, proposal *DistributionInfo) {
-	key := append(keyDistributionProposalPrefix, []byte(proposalID)...)
+func setDistributionProposal(db *dgwdb.LDBDatabase, proposal *DistributionInfo) {
+	key := append(keyDistributionProposalPrefix, []byte(proposal.Proposal.ID)...)
 	data, _ := json.Marshal(proposal)
 	db.Put(key, data)
 }

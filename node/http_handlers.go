@@ -9,6 +9,7 @@ import (
 
 	ew "github.com/ofgp/ethwatcher"
 
+	"github.com/ofgp/ofgp-core/distribution"
 	"github.com/ofgp/ofgp-core/primitives"
 	pb "github.com/ofgp/ofgp-core/proto"
 
@@ -458,4 +459,29 @@ func (node *BraftNode) GetMintFeeRate() int64 {
 // GetBurnFeeRate 返回熔币的手续费
 func (node *BraftNode) GetBurnFeeRate() int64 {
 	return node.burnFeeRate
+}
+
+// AddProposal 新增一个分配提案
+func (node *BraftNode) AddProposal(p *distribution.Proposal) {
+	node.proposalManager.AddProposal(p)
+}
+
+// GetProposal 获取指定的提案
+func (node *BraftNode) GetProposal(proposalID string) *distribution.DistributionInfo {
+	return node.proposalManager.GetProposal(proposalID)
+}
+
+// GetAllProposal 获取所有的提案
+func (node *BraftNode) GetAllProposal() []*distribution.DistributionInfo {
+	return node.proposalManager.ListProposal()
+}
+
+// DeleteProposal 删除指定的提案，注意只有处于new或者执行失败的情况下，提案才会被删除
+func (node *BraftNode) DeleteProposal(proposalID string) bool {
+	return node.proposalManager.DeleteProposal(proposalID)
+}
+
+// ExecuteProposal 执行指定的提案
+func (node *BraftNode) ExecuteProposal(proposalID string) {
+	node.proposalManager.ExecuteProposal(proposalID)
 }

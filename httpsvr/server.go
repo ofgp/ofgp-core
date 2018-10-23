@@ -76,5 +76,12 @@ func StartHTTP(node *node.BraftNode, user, pwd, endpoint string, allowedOrigins 
 	//for wallet app
 	router.GET("/exconfig", basicAuth(hd.getExConfig, user, pwd))
 	router.GET("/mint_payload", basicAuth(hd.getMintPayload, user, pwd))
+	//分配提案相关接口
+	router.POST("/proposal", basicAuth(hd.addProposal, user, pwd))
+	router.GET("/proposal/:proposal_id", basicAuth(hd.getProposal, user, pwd))
+	router.GET("/proposallist", basicAuth(hd.getAllProposal, user, pwd))
+	router.DELETE("/proposal/:proposal_id", basicAuth(hd.deleteProposal, user, pwd))
+	router.POST("/execproposal/:proposal_id", basicAuth(hd.executeProposal, user, pwd))
+
 	go http.ListenAndServe(endpoint, c.Handler(router))
 }

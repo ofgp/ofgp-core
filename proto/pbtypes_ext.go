@@ -949,15 +949,15 @@ type eosMemo struct {
 	Address string `json:"address"`
 }
 
-// EOSToPbTx EOS链监听到的交易转pb结构
-func EOSToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
+// XINToPbTx XIN链监听到的交易转pb结构
+func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 	if tx.GetAmount() <= 0 {
 		return nil
 	}
 	watchedTx := &WatchedTxInfo{
 		Txid:      tx.GetTxID(),
 		Amount:    int64(tx.GetAmount()),
-		From:      "eos",
+		From:      "xin",
 		To:        "bch",
 		TokenFrom: 1,
 		TokenTo:   0,

@@ -28,8 +28,8 @@ var (
 	keyLeaveNodeInfo       = []byte("LeaveNodeInfo")
 	keyETHHeight           = []byte("ETHHeight")
 	keyETHTxIndex          = []byte("ETHTxIndex")
-	keyEOSHeight           = []byte("EOSHeight")
-	keyEOSTxIndex          = []byte("EOSTxIndex")
+	keyXINHeight           = []byte("XINHeight")
+	keyXINTxIndex          = []byte("XINTxIndex")
 	keyMultiSigSnapshot    = []byte("MS")
 	keyCommitChainPrefix   = []byte("B")
 	keyCommitHsByIdsPrefix = []byte("H")
@@ -546,15 +546,15 @@ func GetETHBlockTxIndex(db *dgwdb.LDBDatabase) int {
 	return res
 }
 
-// SetEOSBlockHeight 保存EOS监听到的高度
-func SetEOSBlockHeight(db *dgwdb.LDBDatabase, height int64) {
+// SetXINBlockHeight 保存XIN监听到的高度
+func SetXINBlockHeight(db *dgwdb.LDBDatabase, height int64) {
 	data := util.I64ToBytes(height)
-	db.Put(keyEOSHeight, data)
+	db.Put(keyXINHeight, data)
 }
 
-// GetEOSBlockHeight 获取EOS监听到的高度
-func GetEOSBlockHeight(db *dgwdb.LDBDatabase) int64 {
-	data, err := db.Get(keyEOSHeight)
+// GetXINBlockHeight 获取XIN监听到的高度
+func GetXINBlockHeight(db *dgwdb.LDBDatabase) int64 {
+	data, err := db.Get(keyXINHeight)
 	if err != nil {
 		return 0
 	}
@@ -565,15 +565,15 @@ func GetEOSBlockHeight(db *dgwdb.LDBDatabase) int64 {
 	return height
 }
 
-// SetEOSBlockTxIndex 保存上次EOS监听到的区块里面的哪一笔交易
-func SetEOSBlockTxIndex(db *dgwdb.LDBDatabase, index int) {
+// SetXINBlockTxIndex 保存上次XIN监听到的区块里面的哪一笔交易
+func SetXINBlockTxIndex(db *dgwdb.LDBDatabase, index int) {
 	data := strconv.Itoa(index)
-	db.Put(keyEOSTxIndex, []byte(data))
+	db.Put(keyXINTxIndex, []byte(data))
 }
 
-// GetEOSBlockTxIndex 获取上次EOS监听到的区块里面的哪一笔交易
-func GetEOSBlockTxIndex(db *dgwdb.LDBDatabase) int {
-	data, err := db.Get(keyEOSTxIndex)
+// GetXINBlockTxIndex 获取上次XIN监听到的区块里面的哪一笔交易
+func GetXINBlockTxIndex(db *dgwdb.LDBDatabase) int {
+	data, err := db.Get(keyXINTxIndex)
 	if err != nil {
 		return 0
 	}

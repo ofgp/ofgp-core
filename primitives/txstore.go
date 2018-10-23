@@ -270,6 +270,16 @@ func (ts *TxStore) AddFreshWatchedTx(tx *pb.WatchedTxInfo) {
 	}
 }
 
+// WatchedTxToFresh 把已经监听到的交易添加到待处理列表, 仅distributionproposal会调用
+func (ts *TxStore) WatchedTxToFresh(txId string) {
+	ts.RLock()
+	tx, ok := ts.watchedTxInfo[txId]
+	ts.RUnlock()
+	if ok {
+		ts.addFreshChan <- tx.Tx
+	}
+}
+
 // GetFreshWatchedTxs 获取尚未被处理的公链交易
 func (ts *TxStore) GetFreshWatchedTxs() []*WatchedTxInfo {
 	ts.Lock()
@@ -277,7 +287,7 @@ func (ts *TxStore) GetFreshWatchedTxs() []*WatchedTxInfo {
 	var reAppend []*WatchedTxInfo
 	for _, v := range ts.freshWatchedTxInfo {
 		// 本term内已经确定加签失败的交易，下个term再重新发起
-		if IsSignFailed(ts.db, v.Tx.Txid, ts.currTerm) {
+		if IsSignFailed(ts.db, v.Tx.Txid, ts.currTerm) && !v.Tx.IsDistributionTx() {
 			reAppend = append(reAppend, v)
 			continue
 		}
