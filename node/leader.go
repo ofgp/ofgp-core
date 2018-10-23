@@ -589,7 +589,12 @@ func (ld *Leader) broadcastSign(msg *pb.SignTxRequest, nodes []cluster.NodeInfo,
 	}
 	for _, node := range nodes {
 		if node.IsNormal {
-			go ld.pm.NotifySignTx(node.Id, msg)
+			go func(nodeId int32, msg *pb.SignTxRequest) {
+				_, err := ld.pm.NotifySignTx(nodeId, msg)
+				if err != nil && nodeId == ld.nodeInfo.Id {
+					ld.txStore.AddFreshWatchedTx(msg.WatchedTx)
+				}
+			}(node.Id, msg)
 		}
 	}
 }
