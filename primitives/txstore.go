@@ -202,6 +202,7 @@ func (ts *TxStore) Run(ctx context.Context) {
 				txWaitingTolerance: defaultTxWaitingTolerance,
 			}
 			ts.Lock()
+			bsLogger.Debug("add fresh tx to freshlist", "scTxID", watchedTx.Txid)
 			ts.freshWatchedTxInfo[watchedTx.Txid] = wtx
 			ts.Unlock()
 		case term := <-ts.newTermChan:

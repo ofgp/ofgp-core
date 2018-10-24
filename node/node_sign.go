@@ -213,7 +213,7 @@ func (node *BraftNode) doSave(msg *pb.SignedResult) {
 
 func (node *BraftNode) saveSignedResult(ctx context.Context) {
 	//定期删除已处理的sign
-	clearCh := time.NewTicker(cluster.BlockInterval).C
+	clearCh := time.NewTicker(3 * cluster.BlockInterval).C
 	for {
 		select {
 		case msg := <-node.signedResultChan:
@@ -255,15 +255,16 @@ func (node *BraftNode) checkSignTimeout() {
 			if signReq == nil { //本地尚未签名
 				return true
 			}
-			node.blockStore.DeleteSignReqMsg(scTxID)
 
 			if !signReq.WatchedTx.IsTransferTx() {
 				if !node.hasTxInWaitting(scTxID) { //如果签名已经共识
+					node.blockStore.DeleteSignReqMsg(scTxID)
 					node.txStore.AddFreshWatchedTx(signReq.WatchedTx)
 				} else {
 					nodeLogger.Debug("tx is in waiting", "scTxID", scTxID)
 				}
 			} else {
+				node.blockStore.DeleteSignReqMsg(scTxID)
 				node.txStore.DeleteWatchedTx(scTxID)
 			}
 		}
