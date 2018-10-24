@@ -110,8 +110,9 @@ func (node *BraftNode) createTxView(blockID string, height int64, tx *pb.Transac
 	for _, addr := range addrList {
 		addrs = append(addrs, addr.Address)
 	}
+
 	var tokenCode, appCode uint32
-	if watchedTx.From == "eth" { //熔币
+	if watchedTx.From == "eth" || watchedTx.From == "xin" { //熔币
 		tokenCode, appCode = watchedTx.TokenTo, watchedTx.TokenFrom
 	} else { //铸币
 		tokenCode, appCode = watchedTx.TokenFrom, watchedTx.TokenTo
