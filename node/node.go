@@ -12,8 +12,11 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"eosc/eoswatcher"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/ofgp/bitcoinWatcher/coinmanager"
@@ -23,7 +26,9 @@ import (
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/crypto"
 	"github.com/ofgp/ofgp-core/dgwdb"
+	"github.com/ofgp/ofgp-core/distribution"
 	"github.com/ofgp/ofgp-core/log"
+	"github.com/ofgp/ofgp-core/price"
 	"github.com/ofgp/ofgp-core/primitives"
 	pb "github.com/ofgp/ofgp-core/proto"
 	"github.com/ofgp/ofgp-core/util"
@@ -47,6 +52,10 @@ var (
 	BchConfirms       int
 	EthConfirms       int
 	ConfirmTolerance  time.Duration
+	// CheckOnChainCur 链上验证并发数
+	CheckOnChainCur int
+	// CheckOnChainInterval 探测时间间隔
+	CheckOnChainInterval time.Duration
 )
 
 type waitingConfirmTx struct {
@@ -87,16 +96,19 @@ func GetStartMode() int {
 
 // BraftNode node主结构, 也是程序启动的入口
 type BraftNode struct {
-	localNodeInfo        cluster.NodeInfo
-	signer               *crypto.SecureSigner
-	blockStore           *primitives.BlockStore
-	txStore              *primitives.TxStore
-	peerManager          *cluster.PeerManager
-	accuser              *accuser.Accuser
-	leader               *Leader
-	bchWatcher           *btcwatcher.MortgageWatcher
-	btcWatcher           *btcwatcher.MortgageWatcher
-	ethWatcher           *ew.Client
+	localNodeInfo   cluster.NodeInfo
+	signer          *crypto.SecureSigner
+	blockStore      *primitives.BlockStore
+	txStore         *primitives.TxStore
+	peerManager     *cluster.PeerManager
+	accuser         *accuser.Accuser
+	leader          *Leader
+	bchWatcher      *btcwatcher.MortgageWatcher
+	btcWatcher      *btcwatcher.MortgageWatcher
+	ethWatcher      *ew.Client
+	xinWatcher      *eoswatcher.EOSWatcher //xin chain is based on eos chain
+	proposalManager *distribution.ProposalManager
+
 	syncDaemon           *SyncDaemon
 	mu                   sync.Mutex
 	waitingConfirmTxChan chan *waitingConfirmTx
@@ -167,6 +179,7 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 		btcWatcher *btcwatcher.MortgageWatcher
 		bchWatcher *btcwatcher.MortgageWatcher
 		ethWatcher *ew.Client
+		xinWatcher *eoswatcher.EOSWatcher
 		err        error
 	)
 	if startMode != cluster.ModeWatch && startMode != cluster.ModeTest {
@@ -190,10 +203,19 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 		if err != nil {
 			panic(fmt.Sprintf("new eth watcher failed, err: %v", err))
 		}
+
+		xinURL := viper.GetString("DGW.xin_client_url")
+		if len(xinURL) > 0 {
+			xinWatcher = eoswatcher.NewEosWatcher(xinURL, viper.GetString("KEYSTORE.local_pubkey_hash"), viper.GetString("DGW.xin_contract_account"), "destroytoken", "createtoken")
+		}
 	}
 
+	priceTool := price.NewPriceTool(viper.GetString("DGW.price_server"))
+
 	ts := primitives.NewTxStore(db)
-	bs := primitives.NewBlockStore(db, ts, btcWatcher, bchWatcher, ethWatcher, signer, localNodeInfo.Id)
+	proMgr := distribution.NewProposalManager(db, ts)
+	bs := primitives.NewBlockStore(db, ts, btcWatcher, bchWatcher, ethWatcher, xinWatcher, priceTool,
+		signer, localNodeInfo.Id)
 
 	//交易相关连接池大小
 	txConnPoolSize := viper.GetInt("DGW.tx_conn_pool_size")
@@ -208,7 +230,7 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 	pm := cluster.NewPeerManager(localNodeInfo.Id, txConnPoolSize, blockPoolSize)
 
 	ac := accuser.NewAccuser(localNodeInfo, signer, pm)
-	ld := NewLeader(localNodeInfo, bs, ts, signer, btcWatcher, bchWatcher, ethWatcher, pm)
+	ld := NewLeader(localNodeInfo, bs, ts, signer, btcWatcher, bchWatcher, ethWatcher, xinWatcher, priceTool, pm)
 	syncDaemon := NewSyncDaemon(db, bs, pm)
 
 	mintFeeRate := viper.GetInt64("BUS.mint_fee_rate")
@@ -230,6 +252,8 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 		bchWatcher:           bchWatcher,
 		btcWatcher:           btcWatcher,
 		ethWatcher:           ethWatcher,
+		xinWatcher:           xinWatcher,
+		proposalManager:      proMgr,
 		syncDaemon:           syncDaemon,
 		mu:                   sync.Mutex{},
 		waitingConfirmTxChan: txChan,
@@ -510,6 +534,7 @@ func (bn *BraftNode) Run() {
 	if startMode != cluster.ModeTest {
 		go bn.regularSyncUp(ctx)
 	}
+	bn.proposalManager.LoadFromDB()
 }
 
 func openDbOrDie(dbPath string) (db *dgwdb.LDBDatabase, newlyCreated bool) {
@@ -637,15 +662,24 @@ func (bn *BraftNode) watchNewTx(ctx context.Context) {
 	btcTxChan := bn.btcWatcher.GetTxChan()
 
 	ethEventChan := make(chan *ew.PushEvent)
-	height := bn.blockStore.GetETHBlockHeight()
-	index := bn.blockStore.GetETHBlockTxIndex()
-	if height == nil {
+	ethHeight := bn.blockStore.GetETHBlockHeight()
+	ethIndex := bn.blockStore.GetETHBlockTxIndex()
+	if ethHeight == nil {
 		h := viper.GetInt64("DGW.eth_height")
-		height = big.NewInt(h)
-		index = viper.GetInt("DGW.eth_tran_idx")
+		ethHeight = big.NewInt(h)
+		ethIndex = viper.GetInt("DGW.eth_tran_idx")
 	}
+	bn.ethWatcher.StartWatch(*ethHeight, ethIndex, ethEventChan)
 
-	bn.ethWatcher.StartWatch(*height, index, ethEventChan)
+	xinTxChan := make(chan *eoswatcher.EOSPushEvent)
+	xinHeight := bn.blockStore.GetXINBlockHeight()
+	xinIndex := bn.blockStore.GetXINBlockTxIndex()
+	if xinHeight == 0 {
+		xinHeight = viper.GetInt64("DGW.xin_height")
+		xinIndex = viper.GetInt("DGW.xin_tran_idx")
+	}
+	bn.xinWatcher.StartWatch(uint32(xinHeight), uint32(xinIndex), xinTxChan)
+
 	var watchedTx *pb.WatchedTxInfo
 	for {
 		if bn.isInReconfig {
@@ -676,6 +710,8 @@ func (bn *BraftNode) watchNewTx(ctx context.Context) {
 			watchedTx = pb.BtcToPbTx(tx)
 		case ev := <-ethEventChan:
 			bn.dealEthEvent(ev)
+		case ev := <-xinTxChan:
+			bn.dealXINEvent(ev)
 		case <-ctx.Done():
 			return
 		}
@@ -736,6 +772,15 @@ func (bn *BraftNode) dealEthEvent(ev *ew.PushEvent) {
 	bn.blockStore.SetETHBlockTxIndex(ev.Tx.TxIndex)
 }
 
+func (bn *BraftNode) dealXINEvent(ev *eoswatcher.EOSPushEvent) {
+	watchedTx := pb.XINToPbTx(ev)
+	if watchedTx != nil {
+		bn.txStore.AddWatchedTx(watchedTx)
+	} else {
+		nodeLogger.Debug("create watched tx failed", "tx", ev.GetTxID())
+	}
+}
+
 func (bn *BraftNode) dealWaitingChan(ctx context.Context) {
 	for {
 		select {
@@ -793,6 +838,9 @@ func (bn *BraftNode) checkTxOnChain(tx *waitingConfirmTx, wg *sync.WaitGroup) {
 			if chainTx.Confirmations >= uint64(BchConfirms) {
 				amount := bn.blockStore.GetFinalAmount(chainTx.ScTxid)
 				bn.txStore.CreateInnerTx(chainTx.ScTxid, tx.msgId, amount)
+				if strings.HasPrefix(tx.msgId, "DistributionTx") {
+					bn.proposalManager.SetSuccess(tx.msgId[14:])
+				}
 				bn.deleteFromWaiting(tx.msgId)
 			}
 		}
@@ -805,6 +853,9 @@ func (bn *BraftNode) checkTxOnChain(tx *waitingConfirmTx, wg *sync.WaitGroup) {
 			if chainTx.Confirmations >= uint64(BtcConfirms) {
 				amount := bn.blockStore.GetFinalAmount(chainTx.ScTxid)
 				bn.txStore.CreateInnerTx(chainTx.ScTxid, tx.msgId, amount)
+				if strings.HasPrefix(tx.msgId, "DistributionTx") {
+					bn.proposalManager.SetSuccess(tx.msgId[14:])
+				}
 				bn.deleteFromWaiting(tx.msgId)
 			}
 		}
@@ -827,6 +878,19 @@ func (bn *BraftNode) checkTxOnChain(tx *waitingConfirmTx, wg *sync.WaitGroup) {
 				}
 			}
 		}
+	} else if tx.chainType == "xin" {
+		nodeLogger.Debug("begin filter xin tx", "sctxid", tx.msgId)
+		chainTx, _ := bn.xinWatcher.GetEventByTxid(tx.chainTxId)
+		if chainTx != nil {
+			if !tx.inMem {
+				tx.setInMem()
+			}
+			nodeLogger.Debug("xin block height", "lastirr", bn.xinWatcher.LastIrreversibleBlockNum, "txheight", chainTx.GetHeight())
+			if int64(bn.xinWatcher.LastIrreversibleBlockNum) >= chainTx.GetHeight() {
+				bn.txStore.CreateInnerTx(tx.chainTxId, tx.msgId, 0)
+				bn.deleteFromWaiting(tx.msgId)
+			}
+		}
 	}
 }
 
@@ -844,12 +908,6 @@ func (bn *BraftNode) getWaitingTxCh() (<-chan *waitingConfirmTx, int) {
 
 	return txCh, txSize
 }
-
-//链上验证并发数
-var CheckOnChainCur int
-
-//探测时间间隔
-var CheckOnChainInterval time.Duration
 
 func (bn *BraftNode) watchWatingConfirmTx(ctx context.Context) {
 	if CheckOnChainInterval == 0 {

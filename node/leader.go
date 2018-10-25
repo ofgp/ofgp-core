@@ -2,6 +2,7 @@ package node
 
 import (
 	"bytes"
+	"eosc/eoswatcher"
 	"strconv"
 	"sync"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/crypto"
 	"github.com/ofgp/ofgp-core/log"
+	"github.com/ofgp/ofgp-core/price"
 	"github.com/ofgp/ofgp-core/primitives"
 	pb "github.com/ofgp/ofgp-core/proto"
 	"github.com/ofgp/ofgp-core/util"
@@ -59,6 +61,8 @@ type Leader struct {
 	bchWatcher *btcwatcher.MortgageWatcher
 	btcWatcher *btcwatcher.MortgageWatcher
 	ethWatcher *ew.Client
+	xinWatcher *eoswatcher.EOSWatcher //xin chain is based on eos chain
+	priceTool  *price.PriceTool
 	pm         *cluster.PeerManager
 	sync.Mutex
 }
@@ -66,7 +70,7 @@ type Leader struct {
 // NewLeader 新生成一个leader对象，并启动后台任务，循环检查选举相关任务（创建块，投票等）
 func NewLeader(nodeInfo cluster.NodeInfo, bs *primitives.BlockStore, ts *primitives.TxStore,
 	signer *crypto.SecureSigner, btcWatcher *btcwatcher.MortgageWatcher, bchWatcher *btcwatcher.MortgageWatcher,
-	ethWatcher *ew.Client, pm *cluster.PeerManager) *Leader {
+	ethWatcher *ew.Client, xinWatcher *eoswatcher.EOSWatcher, tool *price.PriceTool, pm *cluster.PeerManager) *Leader {
 	leader := &Leader{
 		BecomeLeaderEvent: util.NewEvent(),
 		NewInitEvent:      util.NewEvent(),
@@ -93,6 +97,8 @@ func NewLeader(nodeInfo cluster.NodeInfo, bs *primitives.BlockStore, ts *primiti
 		bchWatcher: bchWatcher,
 		btcWatcher: btcWatcher,
 		ethWatcher: ethWatcher,
+		xinWatcher: xinWatcher,
+		priceTool:  tool,
 		pm:         pm,
 	}
 
@@ -426,13 +432,17 @@ func (ld *Leader) createTransaction(ctx context.Context) {
 						newlyTx = ld.createEthInput(tx.Tx)
 					} else if tx.Tx.To == "btc" {
 						newlyTx = ld.createBtcTx(tx.Tx, "btc")
+					} else if tx.Tx.To == "xin" {
+						newlyTx = ld.createXINTx(tx.Tx)
 					} else {
 						leaderLogger.Error("watched tx wrong type", "type", tx.Tx.To)
 						continue
 					}
 					if newlyTx == nil {
 						//创建交易失败重新添加到fresh
-						ld.txStore.AddFreshWatchedTx(tx.Tx)
+						if !tx.Tx.IsDistributionTx() {
+							ld.txStore.AddFreshWatchedTx(tx.Tx)
+						}
 						continue
 					}
 					signTxReq, err := pb.MakeSignTxMsg(ld.blockStore.GetNodeTerm(), ld.nodeInfo.Id,
@@ -481,9 +491,27 @@ func (ld *Leader) createBtcTx(watchedTx *pb.WatchedTxInfo, chainType string) *pb
 		watcher = ld.btcWatcher
 	}
 
+	priceInfo, err := ld.priceTool.GetCurrPrice("BCH-USDT")
+	if err != nil {
+		leaderLogger.Error("get price failed", "err", err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	if len(priceInfo.Err) > 0 {
+		leaderLogger.Error("get price failed", "err", priceInfo.Err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+
+	leaderLogger.Debug("create btc tx, price info", "price", priceInfo.Price, "ts", priceInfo.Timestamp)
+
 	var amount int64
 	for _, a := range watchedTx.RechargeList {
-		amount = a.Amount - a.Amount*int64(ld.burnFeeRate)/10000
+		if watchedTx.From == "xin" {
+			amount = int64(float64(a.Amount) * 100000.0 / float64(priceInfo.Price))
+		} else if watchedTx.IsDistributionTx() {
+			amount = a.Amount
+		} else {
+			amount = a.Amount - a.Amount*int64(ld.burnFeeRate)/10000
+		}
 		watcherAddressInfo = append(watcherAddressInfo, &btcwatcher.AddressInfo{
 			Amount:  amount,
 			Address: a.Address,
@@ -498,13 +526,13 @@ func (ld *Leader) createBtcTx(watchedTx *pb.WatchedTxInfo, chainType string) *pb
 	leaderLogger.Debug("create coin tx", "sctxid", watchedTx.Txid, "newlyTxid", newlyTx.TxHash().String())
 
 	buf := bytes.NewBuffer([]byte{})
-	err := newlyTx.Serialize(buf)
+	err = newlyTx.Serialize(buf)
 	if err != nil {
 		leaderLogger.Error("serialize newly tx failed", "err", err)
 		return nil
 	}
 	ld.blockStore.SetFinalAmount(amount, watchedTx.Txid)
-	return &pb.NewlyTx{Data: buf.Bytes(), Amount: amount}
+	return &pb.NewlyTx{Data: buf.Bytes(), Amount: amount, Timestamp: priceInfo.Timestamp}
 }
 
 func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
@@ -521,6 +549,38 @@ func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 	}
 	ld.blockStore.SetFinalAmount(amount, watchedTx.Txid)
 	return &pb.NewlyTx{Data: input, Amount: amount}
+}
+
+// 暂时没有收取手续费
+func (ld *Leader) createXINTx(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
+	priceInfo, err := ld.priceTool.GetCurrPrice("BCH-USDT")
+	if err != nil {
+		leaderLogger.Error("get price failed", "err", err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	if len(priceInfo.Err) > 0 {
+		leaderLogger.Error("get price failed", "err", priceInfo.Err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	// 目标token对标USD的比例是1000:1。
+	amount := float64(watchedTx.RechargeList[0].Amount) * float64(priceInfo.Price) / 100000.0
+	action, err := ld.xinWatcher.XinPlayerCreateTokenAction(viper.GetString("DGW.xin_contract_account"), viper.GetString("DGW.xin_transfer_account"),
+		watchedTx.RechargeList[0].Address, uint32(amount))
+	if err != nil {
+		leaderLogger.Error("create new xin tx failed", "err", err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	transfer, err := ld.xinWatcher.CreateTx(action, 10*time.Minute)
+	if err != nil {
+		leaderLogger.Error("create xin transfer tx failed", "err", err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	pack, err := transfer.Pack(0)
+	if err != nil {
+		leaderLogger.Error("pack xin tx failed", "err", err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	return &pb.NewlyTx{Data: pack.PackedTransaction, Timestamp: priceInfo.Timestamp}
 }
 
 // 广播签名交易, 对于ETH，广播给其他节点即可；对于BTC/BCH，广播之后还需要收集返回的签名，按顺序merge之后去公链上发送交易
