@@ -280,8 +280,10 @@ func (sd *SyncDaemon) processSimpleSyncUpResponse(rsp *pb.SyncUpResponse, accuse
 					IsNormal:  true,
 				}
 				cluster.AddNodeInfo(nodeInfo)
+				sd.peerManager.AddNode(nodeInfo)
 			} else {
 				cluster.DeleteNode(reConfig.NodeId)
+				sd.peerManager.DeleteNode(reConfig.NodeId)
 			}
 			multiSig := getFederationAddress()
 			cluster.SetCurrMultiSig(multiSig)
