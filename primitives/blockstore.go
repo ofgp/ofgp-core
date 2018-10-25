@@ -11,6 +11,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/btcsuite/btcd/wire"
+	btcfunc "github.com/ofgp/bitcoinWatcher/coinmanager"
+	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
+	ew "github.com/ofgp/ethwatcher"
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/crypto"
 	"github.com/ofgp/ofgp-core/dgwdb"
@@ -19,13 +23,6 @@ import (
 	"github.com/ofgp/ofgp-core/util"
 	"github.com/ofgp/ofgp-core/util/assert"
 	"github.com/ofgp/ofgp-core/util/task"
-
-	btcfunc "github.com/ofgp/bitcoinWatcher/coinmanager"
-	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
-
-	ew "github.com/ofgp/ethwatcher"
-
-	"github.com/btcsuite/btcd/wire"
 	"github.com/spf13/viper"
 )
 
@@ -913,7 +910,7 @@ func (bs *BlockStore) commitBlockWithCheck(tasks *task.Queue, blockPack *pb.Bloc
 		if reconfig.Type == pb.Reconfig_JOIN {
 			joinInfo := GetJoinNodeInfo(bs.db)
 			if joinInfo != nil {
-				tasks.Add(func() { bs.JoinedEvent.Emit(reconfig.Host, reconfig.NodeId, joinInfo.Pubkey, joinInfo.Vote) })
+				tasks.Add(func() { bs.JoinedEvent.Emit(reconfig.Host, reconfig.NodeId, reconfig.Pubkey, reconfig.Vote) })
 			} else {
 				bsLogger.Error("node join failed, joininfo not found")
 			}
@@ -1196,4 +1193,9 @@ func (bs *BlockStore) checkReconfigBlock(blockPack *pb.BlockPack) bool {
 		msg := GetLeaveNodeInfo(bs.db)
 		return msg != nil && msg.NodeId == reconfig.NodeId
 	}
+}
+
+// GetJoinRequest get join requst
+func (bs *BlockStore) GetJoinRequest() *pb.JoinRequest {
+	return GetJoinNodeInfo(bs.db)
 }

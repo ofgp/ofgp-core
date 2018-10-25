@@ -6,17 +6,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang/protobuf/proto"
+	"github.com/ofgp/bitcoinWatcher/coinmanager"
+	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
+	"github.com/ofgp/ethwatcher"
 	"github.com/ofgp/ofgp-core/crypto"
 	"github.com/ofgp/ofgp-core/util"
 	"github.com/ofgp/ofgp-core/util/assert"
 	"github.com/ofgp/ofgp-core/util/sort"
-
-	"github.com/ofgp/bitcoinWatcher/coinmanager"
-	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
-
-	"github.com/ofgp/ethwatcher"
-
-	"github.com/golang/protobuf/proto"
 )
 
 // EqualTo 会更新两个ID，再进行比较。比较函数里面进行更新不是很合理的说
@@ -97,7 +94,7 @@ func CreateTxsBlock(timestampMs int64, prevBlockId *crypto.Digest256, txs []*Tra
 	return block
 }
 
-func CreateJoinReconfigBlock(timestampMs int64, prevBlockId *crypto.Digest256, t Reconfig_Type, host string, nodeId int32) *Block {
+func CreateJoinReconfigBlock(timestampMs int64, prevBlockId *crypto.Digest256, t Reconfig_Type, host string, nodeId int32, pubkey string, vote *Vote) *Block {
 	block := &Block{
 		TimestampMs: timestampMs,
 		PrevBlockId: prevBlockId,
@@ -106,6 +103,8 @@ func CreateJoinReconfigBlock(timestampMs int64, prevBlockId *crypto.Digest256, t
 			Type:   t,
 			Host:   host,
 			NodeId: nodeId,
+			Pubkey: pubkey,
+			Vote:   vote,
 		},
 	}
 	block.UpdateBlockId()

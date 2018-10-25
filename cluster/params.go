@@ -12,7 +12,6 @@ import (
 	"github.com/ofgp/ofgp-core/crypto"
 	pb "github.com/ofgp/ofgp-core/proto"
 	"github.com/ofgp/ofgp-core/util/assert"
-
 	"github.com/spf13/viper"
 )
 
@@ -149,6 +148,17 @@ func AddNodeInfo(nodeInfo NodeInfo) {
 	MaxFaultyN = (ClusterSize - 1) / 3
 	QuorumN = (ClusterSize+MaxFaultyN)/2 + 1
 	AccuseQuorumN = MaxFaultyN + 1
+}
+
+// IsNodeExist node 是否已经存在
+func IsNodeExist(nodeId int32) bool {
+	for _, node := range NodeList {
+		if node.Id == nodeId {
+			log.Println("node is already exist")
+			return true
+		}
+	}
+	return false
 }
 
 // NewNodeInfo 创建Node

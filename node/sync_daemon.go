@@ -1,6 +1,7 @@
 package node
 
 import (
+	"encoding/hex"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -266,6 +267,26 @@ func (sd *SyncDaemon) processSimpleSyncUpResponse(rsp *pb.SyncUpResponse, accuse
 			sdLogger.Error("check block not pass")
 			break
 		}
+		if block.IsReconfigBlock() {
+			sdLogger.Debug("deal reconfig block")
+			reConfig := block.Block().Reconfig
+			if reConfig.Type == pb.Reconfig_JOIN && !cluster.IsNodeExist(reConfig.NodeId) {
+				pubKey, _ := hex.DecodeString(reConfig.Pubkey)
+				nodeInfo := cluster.NodeInfo{
+					Id:        reConfig.NodeId,
+					Name:      fmt.Sprintf("server%d", reConfig.NodeId),
+					Url:       reConfig.Host,
+					PublicKey: pubKey,
+					IsNormal:  true,
+				}
+				cluster.AddNodeInfo(nodeInfo)
+			} else {
+				cluster.DeleteNode(reConfig.NodeId)
+			}
+			multiSig := getFederationAddress()
+			cluster.SetCurrMultiSig(multiSig)
+		}
+
 		bs.JustCommitIt(block)
 		bs.SetNodeTerm(block.Term())
 		height := block.Height()
