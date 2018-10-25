@@ -148,8 +148,15 @@ func run(ctx *cli.Context) {
 			panic("join not set pubkeyHash")
 		}
 		nodeInfo = cluster.NewNodeInfo(host, nodeId, pubKey, pubKeyHash)
+	} else startMode == cluster.ModeJoin || startMode == cluster.ModeTest{
+		
+		node.InitObserver()
+		// host := viper.GetString("DGW.local_host")
+		nodeInfo = cluster.NodeInfo{
+			Id:0,
+		}
 	}
-	if nodeInfo.Url == "" {
+	if startMode!= cluster.ModeJoin && startMode!= cluster.ModeTest &&  nodeInfo.Url == "" {
 		panic("get no node info")
 	}
 
