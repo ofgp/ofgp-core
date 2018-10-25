@@ -197,13 +197,14 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 		if err != nil {
 			nodeLogger.Error("new btc watcher failed", "err", err)
 		}
-		pubkeyKey := "KEYSTORE.key_" + fmt.Sprintf("%d", localNodeInfo.Id)
-		ethWatcher, err = ew.NewEthWatcher(viper.GetString("DGW.eth_client_url"),
-			viper.GetInt64("DGW.eth_confirm_count"), viper.GetString(pubkeyKey))
-		if err != nil {
-			nodeLogger.Error("new eth watcher failed", "err", err)
+		ethURI := viper.GetString("DGW.eth_client_url")
+		if len(ethURI) > 0 {
+			pubkeyKey := "KEYSTORE.key_" + fmt.Sprintf("%d", localNodeInfo.Id)
+			ethWatcher, err = ew.NewEthWatcher(ethURI, viper.GetInt64("DGW.eth_confirm_count"), viper.GetString(pubkeyKey))
+			if err != nil {
+				panic(fmt.Sprintf("new eth watcher failed, err: %v", err))
+			}
 		}
-
 		xinURL := viper.GetString("DGW.xin_client_url")
 		if len(xinURL) > 0 {
 			xinWatcher = eoswatcher.NewEosWatcher(xinURL, viper.GetString("KEYSTORE.local_pubkey_hash"), viper.GetString("DGW.xin_contract_account"), "destroytoken", "createtoken")
@@ -211,7 +212,6 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 	}
 
 	priceTool := price.NewPriceTool(viper.GetString("DGW.price_server"))
-
 	ts := primitives.NewTxStore(db)
 	proMgr := distribution.NewProposalManager(db, ts)
 	bs := primitives.NewBlockStore(db, ts, btcWatcher, bchWatcher, ethWatcher, xinWatcher, priceTool,

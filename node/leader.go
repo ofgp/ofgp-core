@@ -491,21 +491,28 @@ func (ld *Leader) createBtcTx(watchedTx *pb.WatchedTxInfo, chainType string) *pb
 		watcher = ld.btcWatcher
 	}
 
-	priceInfo, err := ld.priceTool.GetCurrPrice("BCH-USDT")
-	if err != nil {
-		leaderLogger.Error("get price failed", "err", err, "sctxid", watchedTx.Txid)
-		return nil
-	}
-	if len(priceInfo.Err) > 0 {
-		leaderLogger.Error("get price failed", "err", priceInfo.Err, "sctxid", watchedTx.Txid)
-		return nil
-	}
+	var (
+		priceInfo *price.PriceInfo
+		timestamp int64
+		amount    int64
+		err       error
+	)
 
-	leaderLogger.Debug("create btc tx, price info", "price", priceInfo.Price, "ts", priceInfo.Timestamp)
-
-	var amount int64
 	for _, a := range watchedTx.RechargeList {
 		if watchedTx.From == "xin" {
+			if priceInfo == nil {
+				priceInfo, err = ld.priceTool.GetCurrPrice("BCH-USDT")
+				if err != nil {
+					leaderLogger.Error("get price failed", "err", err, "sctxid", watchedTx.Txid)
+					return nil
+				}
+				if len(priceInfo.Err) > 0 {
+					leaderLogger.Error("get price failed", "err", priceInfo.Err, "sctxid", watchedTx.Txid)
+					return nil
+				}
+				timestamp = priceInfo.Timestamp
+				leaderLogger.Debug("create btc tx, price info", "price", priceInfo.Price, "ts", timestamp)
+			}
 			amount = int64(float64(a.Amount) * 100000.0 / float64(priceInfo.Price))
 		} else if watchedTx.IsDistributionTx() {
 			amount = a.Amount
@@ -517,7 +524,6 @@ func (ld *Leader) createBtcTx(watchedTx *pb.WatchedTxInfo, chainType string) *pb
 			Address: a.Address,
 		})
 	}
-	leaderLogger.Debug("rechargelist", "sctxid", watchedTx.Txid, "addrs", watcherAddressInfo)
 	newlyTx, ok := watcher.CreateCoinTx(watcherAddressInfo, cluster.QuorumN, cluster.ClusterSize)
 	if ok != 0 {
 		leaderLogger.Error("create new chan tx failed", "errcode", ok, "sctxid", watchedTx.Txid)
@@ -532,7 +538,7 @@ func (ld *Leader) createBtcTx(watchedTx *pb.WatchedTxInfo, chainType string) *pb
 		return nil
 	}
 	ld.blockStore.SetFinalAmount(amount, watchedTx.Txid)
-	return &pb.NewlyTx{Data: buf.Bytes(), Amount: amount, Timestamp: priceInfo.Timestamp}
+	return &pb.NewlyTx{Data: buf.Bytes(), Amount: amount, Timestamp: timestamp}
 }
 
 func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
@@ -593,12 +599,7 @@ func (ld *Leader) broadcastSign(msg *pb.SignTxRequest, nodes []cluster.NodeInfo,
 	}
 	for _, node := range nodes {
 		if node.IsNormal {
-			go func(nodeId int32, msg *pb.SignTxRequest) {
-				_, err := ld.pm.NotifySignTx(nodeId, msg)
-				if err != nil && nodeId == ld.nodeInfo.Id {
-					ld.txStore.AddFreshWatchedTx(msg.WatchedTx)
-				}
-			}(node.Id, msg)
+			go ld.pm.NotifySignTx(node.Id, msg)
 		}
 	}
 }

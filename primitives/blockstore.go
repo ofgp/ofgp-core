@@ -1141,32 +1141,38 @@ func (bs *BlockStore) validateBtcSignTx(req *pb.SignTxRequest, newlyTx *wire.Msg
 		return wrongInputOutput
 	}
 
-	local, _ := time.LoadLocation("UTC")
-	ts := req.NewlyTx.Timestamp
-	currTs := time.Now().In(local).Unix()
-	// 避免币价信息过期，设定2分钟的限制
-	if currTs-ts > coinPriceExpire {
-		bsLogger.Error("price timestamp is out of date", "curr", currTs, "reqts", ts, "sctxid", req.WatchedTx.Txid)
-		return wrongInputOutput
+	var (
+		priceInfo *price.PriceInfo
+		amount    int64
+		ts        int64
+	)
+	if req.WatchedTx.From == "xin" {
+		local, _ := time.LoadLocation("UTC")
+		ts = req.NewlyTx.Timestamp
+		currTs := time.Now().In(local).Unix()
+		// 避免币价信息过期，设定2分钟的限制
+		if currTs-ts > coinPriceExpire {
+			bsLogger.Error("price timestamp is out of date", "curr", currTs, "reqts", ts, "sctxid", req.WatchedTx.Txid)
+			return wrongInputOutput
+		}
 	}
 
-	priceInfo, err := bs.priceTool.GetPriceByTimestamp("BCH-USDT", int(ts))
-	if err != nil {
-		bsLogger.Error("get price info failed", "err", err, "sctxid", req.WatchedTx.Txid)
-		return wrongInputOutput
-	}
-	if len(priceInfo.Err) > 0 {
-		bsLogger.Error("get price info failed", "err", priceInfo.Err, "sctxid", req.WatchedTx.Txid)
-		return wrongInputOutput
-	}
-
-	bsLogger.Debug("validate btc sign, price info", "price", priceInfo.Price, "ts", ts)
-
-	var amount int64
 	for idx, recharge := range req.WatchedTx.RechargeList {
 		txOut := newlyTx.TxOut[idx]
 		outAddress := btcfunc.ExtractPkScriptAddr(txOut.PkScript, req.WatchedTx.To)
 		if req.WatchedTx.From == "xin" {
+			if priceInfo == nil {
+				priceInfo, err := bs.priceTool.GetPriceByTimestamp("BCH-USDT", int(ts))
+				if err != nil {
+					bsLogger.Error("get price info failed", "err", err, "sctxid", req.WatchedTx.Txid)
+					return wrongInputOutput
+				}
+				if len(priceInfo.Err) > 0 {
+					bsLogger.Error("get price info failed", "err", priceInfo.Err, "sctxid", req.WatchedTx.Txid)
+					return wrongInputOutput
+				}
+				bsLogger.Debug("validate btc sign, price info", "price", priceInfo.Price, "ts", ts)
+			}
 			amount = int64(float64(recharge.Amount) * 100000.0 / float64(priceInfo.Price))
 		} else if req.WatchedTx.IsDistributionTx() {
 			amount = recharge.Amount
