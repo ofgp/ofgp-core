@@ -2,12 +2,13 @@ package node
 
 import (
 	"bytes"
+	"eosc/eoswatcher"
 	"strconv"
 	"sync"
 	"time"
 
-	"eosc/eoswatcher"
-
+	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
+	ew "github.com/ofgp/ethwatcher"
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/crypto"
 	"github.com/ofgp/ofgp-core/log"
@@ -16,13 +17,8 @@ import (
 	pb "github.com/ofgp/ofgp-core/proto"
 	"github.com/ofgp/ofgp-core/util"
 	"github.com/ofgp/ofgp-core/util/assert"
-
 	"github.com/spf13/viper"
 	context "golang.org/x/net/context"
-
-	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
-
-	ew "github.com/ofgp/ethwatcher"
 )
 
 const (
@@ -311,7 +307,11 @@ func (ld *Leader) tryCreateBlockImpl(txs []*pb.Transaction) {
 		blockToInit = maxVotie.Block
 	} else {
 		if len(ld.newNodeHost) > 0 {
-			blockToInit = pb.CreateJoinReconfigBlock(util.NowMs(), top.BlockId(), pb.Reconfig_JOIN, ld.newNodeHost, int32(len(cluster.NodeList)))
+			joinReq := ld.blockStore.GetJoinRequest()
+			if joinReq != nil {
+				blockToInit = pb.CreateJoinReconfigBlock(util.NowMs(), top.BlockId(), pb.Reconfig_JOIN, ld.newNodeHost,
+					int32(len(cluster.NodeList)), joinReq.Pubkey, joinReq.Vote)
+			}
 		} else if ld.leavingNodeId >= 0 {
 			blockToInit = pb.CreateLeaveReconfigBlock(util.NowMs(), top.BlockId(), pb.Reconfig_LEAVE, ld.leavingNodeId)
 		} else {

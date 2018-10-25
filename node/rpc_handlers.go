@@ -3,11 +3,9 @@ package node
 import (
 	"encoding/hex"
 
-	pb "github.com/ofgp/ofgp-core/proto"
-
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/crypto"
-
+	pb "github.com/ofgp/ofgp-core/proto"
 	"github.com/spf13/viper"
 	context "golang.org/x/net/context"
 )
@@ -201,6 +199,9 @@ func (bn *BraftNode) GetClusterNodes(ctx context.Context, msg *pb.Void) (*pb.Nod
 			BchRedeemScript: multiSig.BchRedeemScript,
 		})
 	}
+	// 设置当前节点高度
+	blockHeight := bn.blockStore.GetCommitHeight()
+	rst.BlockHeight = blockHeight
 	return rst, nil
 }
 

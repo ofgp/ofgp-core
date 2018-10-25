@@ -121,6 +121,8 @@ message Reconfig {
     Type type = 1;
     string host = 2;
     int32 node_id = 3;
+    string pubkey = 4;
+    Vote vote = 5;
 }
 
 message Block {
@@ -306,6 +308,7 @@ message NodeList {
     repeated MultiSigInfo multi_sig_info_list = 2;
     int32 leader_id = 3;
     int32 quorum_n = 4;
+    int64 block_height = 5;
 }
 
 message AccuseRecord {

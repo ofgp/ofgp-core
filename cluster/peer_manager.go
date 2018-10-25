@@ -8,7 +8,6 @@ import (
 	"github.com/ofgp/ofgp-core/crypto"
 	"github.com/ofgp/ofgp-core/log"
 	pb "github.com/ofgp/ofgp-core/proto"
-
 	"github.com/spf13/viper"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
@@ -160,7 +159,9 @@ type PeerManager struct {
 func NewPeerManager(localNodeId int32, txConnPoolSize, blockCoonPoolSize int) *PeerManager {
 	peers := make(map[int32]*PeerNode, ClusterSize)
 	for _, nodeInfo := range NodeList {
-		peers[nodeInfo.Id] = NewPeerNode(nodeInfo, txConnPoolSize, blockCoonPoolSize)
+		if nodeInfo.IsNormal {
+			peers[nodeInfo.Id] = NewPeerNode(nodeInfo, txConnPoolSize, blockCoonPoolSize)
+		}
 	}
 
 	return &PeerManager{
@@ -176,6 +177,13 @@ func (pm *PeerManager) AddNode(nodeInfo NodeInfo) {
 	peerNode := NewPeerNode(nodeInfo, pm.txConnPoolSize, pm.blockCoonPoolSize)
 	pm.Lock()
 	pm.peers[nodeInfo.Id] = peerNode
+	pm.Unlock()
+}
+
+// DeleteNode del node
+func (pm *PeerManager) DeleteNode(id int32) {
+	pm.Lock()
+	delete(pm.peers, id)
 	pm.Unlock()
 }
 

@@ -12,15 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	sg "github.com/ofgp/ofgp-core/util/signal"
-
+	"github.com/ofgp/ofgp-core/accuser"
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/httpsvr"
 	"github.com/ofgp/ofgp-core/node"
 	"github.com/ofgp/ofgp-core/util"
-
-	"github.com/ofgp/ofgp-core/accuser"
-
+	sg "github.com/ofgp/ofgp-core/util/signal"
 	"github.com/rcrowley/go-metrics"
 	"github.com/spf13/viper"
 	"github.com/vrischmann/go-metrics-influxdb"
@@ -148,8 +145,16 @@ func run(ctx *cli.Context) {
 			panic("join not set pubkeyHash")
 		}
 		nodeInfo = cluster.NewNodeInfo(host, nodeId, pubKey, pubKeyHash)
+	} else if startMode == cluster.ModeWatch || startMode == cluster.ModeTest {
+		err := node.InitObserver()
+		if err != nil {
+			panic(fmt.Sprintf("init observer err:%s", err.Error()))
+		}
+		nodeInfo = cluster.NodeInfo{
+			Id: 0,
+		}
 	}
-	if nodeInfo.Url == "" {
+	if startMode != cluster.ModeWatch && startMode != cluster.ModeTest && nodeInfo.Url == "" {
 		panic("get no node info")
 	}
 

@@ -19,6 +19,9 @@ import (
 	"eosc/eoswatcher"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/ofgp/bitcoinWatcher/coinmanager"
+	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
+	ew "github.com/ofgp/ethwatcher"
 	"github.com/ofgp/ofgp-core/accuser"
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/crypto"
@@ -30,12 +33,6 @@ import (
 	pb "github.com/ofgp/ofgp-core/proto"
 	"github.com/ofgp/ofgp-core/util"
 	"github.com/ofgp/ofgp-core/util/assert"
-
-	"github.com/ofgp/bitcoinWatcher/coinmanager"
-	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
-
-	ew "github.com/ofgp/ethwatcher"
-
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 )
@@ -162,9 +159,12 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 	initWatchHeight(db)
 	txChan := make(chan *waitingConfirmTx)
 
-	signer := cluster.NodeSigners[localNodeInfo.Id]
-	signer.InitKeystoreParam(viper.GetString("KEYSTORE.keystore_private_key"), viper.GetString("KEYSTORE.service_id"),
-		viper.GetString("KEYSTORE.url"))
+	var signer *crypto.SecureSigner
+	if startMode != cluster.ModeWatch && startMode != cluster.ModeTest {
+		signer = cluster.NodeSigners[localNodeInfo.Id]
+		signer.InitKeystoreParam(viper.GetString("KEYSTORE.keystore_private_key"), viper.GetString("KEYSTORE.service_id"),
+			viper.GetString("KEYSTORE.url"))
+	}
 
 	// 从db还原历史的多签快照
 	multiSigList := primitives.GetMultiSigSnapshot(db)
@@ -182,7 +182,7 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 		xinWatcher *eoswatcher.EOSWatcher
 		err        error
 	)
-	if startMode != cluster.ModeWatch {
+	if startMode != cluster.ModeWatch && startMode != cluster.ModeTest {
 		utxoLockTime := viper.GetInt("DGW.utxo_lock_time")
 		if utxoLockTime == 0 {
 			utxoLockTime = defaultUtxoLockTime
@@ -1008,6 +1008,22 @@ type JoinMsg struct {
 	MultiSigInfos []cluster.MultiSigInfo
 }
 
+// InitObserver 观察节点初始化
+func InitObserver() error {
+	initHost := viper.GetString("DGW.init_node_host")
+	if initHost == "" {
+		return errors.New("init_node_host is empty")
+	}
+	nodeList := getRemoteClusterNodes(initHost)
+	cluster.SetInitNodeHeight(nodeList.BlockHeight)
+	if nodeList == nil || len(nodeList.NodeList) == 0 {
+		return errors.New("get nodelist fail")
+	}
+	cluster.InitWithNodeList(nodeList)
+	nodeLogger.Debug("nodeList", "totalCnt", cluster.TotalNodeCount, "nodeList", cluster.NodeList)
+	return nil
+}
+
 // InitJoin 根据引导节点做集群配置信息的初始化
 func InitJoin(startMode int32) *JoinMsg {
 	initHost := viper.GetString("DGW.init_node_host")
@@ -1018,7 +1034,7 @@ func InitJoin(startMode int32) *JoinMsg {
 	}
 
 	nodeList := getRemoteClusterNodes(initHost)
-
+	cluster.SetInitNodeHeight(nodeList.BlockHeight)
 	//引导节点snapshot multiSig
 	for _, multiSig := range nodeList.MultiSigInfoList {
 		joinMsg.MultiSigInfos = append(joinMsg.MultiSigInfos, cluster.MultiSigInfo{
