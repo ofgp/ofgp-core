@@ -957,10 +957,11 @@ func InitObserver() error {
 		return errors.New("init_node_host is empty")
 	}
 	nodeList := getRemoteClusterNodes(initHost)
-	if len(nodeList) == nil {
+	if nodeList == nil || len(nodeList.NodeList) == 0 {
 		return errors.New("get nodelist fail")
 	}
 	cluster.InitWithNodeList(nodeList)
+	nodeLogger.Debug("nodeList", "totalCnt", cluster.TotalNodeCount, "nodeList", cluster.NodeList)
 	return nil
 }
 
