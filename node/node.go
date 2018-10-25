@@ -957,6 +957,7 @@ func InitObserver() error {
 		return errors.New("init_node_host is empty")
 	}
 	nodeList := getRemoteClusterNodes(initHost)
+	cluster.SetInitNodeHeight(nodeList.BlockHeight)
 	if nodeList == nil || len(nodeList.NodeList) == 0 {
 		return errors.New("get nodelist fail")
 	}
@@ -975,7 +976,7 @@ func InitJoin(startMode int32) *JoinMsg {
 	}
 
 	nodeList := getRemoteClusterNodes(initHost)
-
+	cluster.SetInitNodeHeight(nodeList.BlockHeight)
 	//引导节点snapshot multiSig
 	for _, multiSig := range nodeList.MultiSigInfoList {
 		joinMsg.MultiSigInfos = append(joinMsg.MultiSigInfos, cluster.MultiSigInfo{

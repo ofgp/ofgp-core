@@ -267,7 +267,7 @@ func (sd *SyncDaemon) processSimpleSyncUpResponse(rsp *pb.SyncUpResponse, accuse
 			sdLogger.Error("check block not pass")
 			break
 		}
-		if block.IsReconfigBlock() {
+		if block.IsReconfigBlock() && cluster.GetInitNodeHeight() < block.Height() {
 			sdLogger.Debug("deal reconfig block")
 			reConfig := block.Block().Reconfig
 			if reConfig.Type == pb.Reconfig_JOIN && !cluster.IsNodeExist(reConfig.NodeId) {

@@ -307,6 +307,7 @@ message NodeList {
     repeated MultiSigInfo multi_sig_info_list = 2;
     int32 leader_id = 3;
     int32 quorum_n = 4;
+    int64 block_height = 5;
 }
 
 message AccuseRecord {

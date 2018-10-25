@@ -28,6 +28,7 @@ var (
 	NodeSigners      map[int32]*crypto.SecureSigner
 	MultiSigSnapshot MultiSigInfos
 	CurrMultiSig     MultiSigInfo
+	initNodeHeight   int64 // 引导节点监听到的高度
 )
 
 type MultiSigInfos struct {
@@ -265,4 +266,11 @@ func GetSnapshot() Snapshot {
 
 func DelSnapShot() {
 	ClusterSnapshot = nil
+}
+
+func SetInitNodeHeight(height int64) {
+	initNodeHeight = height
+}
+func GetInitNodeHeight() int64 {
+	return initNodeHeight
 }
