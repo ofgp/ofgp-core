@@ -190,18 +190,18 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 		bchWatcher, err = btcwatcher.NewMortgageWatcher("bch", viper.GetInt64("DGW.bch_height"),
 			multiSig.BchAddress, multiSig.BchRedeemScript, utxoLockTime)
 		if err != nil {
-			panic(fmt.Sprintf("new bitcoin watcher failed, err: %v", err))
+			nodeLogger.Error("new bch watcher failed", "err", err)
 		}
 		btcWatcher, err = btcwatcher.NewMortgageWatcher("btc", viper.GetInt64("DGW.btc_height"),
 			multiSig.BtcAddress, multiSig.BtcRedeemScript, utxoLockTime)
 		if err != nil {
-			panic(fmt.Sprintf("new bitcoin watcher failed, err: %v", err))
+			nodeLogger.Error("new btc watcher failed", "err", err)
 		}
 		pubkeyKey := "KEYSTORE.key_" + fmt.Sprintf("%d", localNodeInfo.Id)
 		ethWatcher, err = ew.NewEthWatcher(viper.GetString("DGW.eth_client_url"),
 			viper.GetInt64("DGW.eth_confirm_count"), viper.GetString(pubkeyKey))
 		if err != nil {
-			panic(fmt.Sprintf("new eth watcher failed, err: %v", err))
+			nodeLogger.Error("new eth watcher failed", "err", err)
 		}
 
 		xinURL := viper.GetString("DGW.xin_client_url")
@@ -656,29 +656,44 @@ func (bn *BraftNode) checkSubTx(tx *btcwatcher.SubTransaction) bool {
 
 // 后面可能会改成每条链一个goroutine，如果每条链的交易量都很大，一个select可能处理不过来
 func (bn *BraftNode) watchNewTx(ctx context.Context) {
-	bn.bchWatcher.StartWatch()
-	bn.btcWatcher.StartWatch()
-	bchTxChan := bn.bchWatcher.GetTxChan()
-	btcTxChan := bn.btcWatcher.GetTxChan()
+	var (
+		bchTxChan    <-chan *btcwatcher.SubTransaction
+		btcTxChan    <-chan *btcwatcher.SubTransaction
+		ethEventChan chan *ew.PushEvent
+		xinTxChan    chan *eoswatcher.EOSPushEvent
+	)
 
-	ethEventChan := make(chan *ew.PushEvent)
-	ethHeight := bn.blockStore.GetETHBlockHeight()
-	ethIndex := bn.blockStore.GetETHBlockTxIndex()
-	if ethHeight == nil {
-		h := viper.GetInt64("DGW.eth_height")
-		ethHeight = big.NewInt(h)
-		ethIndex = viper.GetInt("DGW.eth_tran_idx")
+	if bn.bchWatcher != nil {
+		bn.bchWatcher.StartWatch()
+		bchTxChan = bn.bchWatcher.GetTxChan()
 	}
-	bn.ethWatcher.StartWatch(*ethHeight, ethIndex, ethEventChan)
+	if bn.btcWatcher != nil {
+		bn.btcWatcher.StartWatch()
+		btcTxChan = bn.btcWatcher.GetTxChan()
+	}
 
-	xinTxChan := make(chan *eoswatcher.EOSPushEvent)
-	xinHeight := bn.blockStore.GetXINBlockHeight()
-	xinIndex := bn.blockStore.GetXINBlockTxIndex()
-	if xinHeight == 0 {
-		xinHeight = viper.GetInt64("DGW.xin_height")
-		xinIndex = viper.GetInt("DGW.xin_tran_idx")
+	if bn.ethWatcher != nil {
+		ethEventChan = make(chan *ew.PushEvent)
+		ethHeight := bn.blockStore.GetETHBlockHeight()
+		ethIndex := bn.blockStore.GetETHBlockTxIndex()
+		if ethHeight == nil {
+			h := viper.GetInt64("DGW.eth_height")
+			ethHeight = big.NewInt(h)
+			ethIndex = viper.GetInt("DGW.eth_tran_idx")
+		}
+		bn.ethWatcher.StartWatch(*ethHeight, ethIndex, ethEventChan)
 	}
-	bn.xinWatcher.StartWatch(uint32(xinHeight), uint32(xinIndex), xinTxChan)
+
+	if bn.xinWatcher != nil {
+		xinTxChan = make(chan *eoswatcher.EOSPushEvent)
+		xinHeight := bn.blockStore.GetXINBlockHeight()
+		xinIndex := bn.blockStore.GetXINBlockTxIndex()
+		if xinHeight == 0 {
+			xinHeight = viper.GetInt64("DGW.xin_height")
+			xinIndex = viper.GetInt("DGW.xin_tran_idx")
+		}
+		bn.xinWatcher.StartWatch(uint32(xinHeight), uint32(xinIndex), xinTxChan)
+	}
 
 	var watchedTx *pb.WatchedTxInfo
 	for {

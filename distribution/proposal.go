@@ -72,7 +72,11 @@ func (pm *ProposalManager) LoadFromDB() {
 }
 
 // AddProposal 新增一个提案
-func (pm *ProposalManager) AddProposal(p *Proposal) {
+func (pm *ProposalManager) AddProposal(p *Proposal) bool {
+	old, _ := getDistributionProposal(pm.db, p.ID)
+	if old != nil {
+		return false
+	}
 	di := &DistributionInfo{
 		Proposal:   p,
 		CreateTime: time.Now(),
@@ -82,6 +86,7 @@ func (pm *ProposalManager) AddProposal(p *Proposal) {
 
 	watchedTx := genWatchedTx(p)
 	pm.ts.AddWatchedTx(watchedTx)
+	return true
 }
 
 // DeleteProposal 删除一个提案, 返回是否删除完成

@@ -409,8 +409,11 @@ func (hd *HTTPHandler) addProposal(w http.ResponseWriter, req *http.Request, _ h
 		fmt.Fprintf(w, "%s", newData(paramErrCode, err.Error(), nil))
 		return
 	}
-	hd.node.AddProposal(param)
-	writeResponse(&w, newOKData(nil))
+	if hd.node.AddProposal(param) {
+		writeResponse(&w, newOKData(nil))
+	} else {
+		fmt.Fprintf(w, "%s", newData(sysErrCode, "proposal exist", nil))
+	}
 }
 
 func (hd *HTTPHandler) getProposal(w http.ResponseWriter, req *http.Request, params httprouter.Params) {

@@ -463,8 +463,8 @@ func (node *BraftNode) GetBurnFeeRate() int64 {
 }
 
 // AddProposal 新增一个分配提案
-func (node *BraftNode) AddProposal(p *distribution.Proposal) {
-	node.proposalManager.AddProposal(p)
+func (node *BraftNode) AddProposal(p *distribution.Proposal) bool {
+	return node.proposalManager.AddProposal(p)
 }
 
 // GetProposal 获取指定的提案
