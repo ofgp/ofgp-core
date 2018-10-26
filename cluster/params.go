@@ -12,7 +12,6 @@ import (
 	"github.com/ofgp/ofgp-core/crypto"
 	pb "github.com/ofgp/ofgp-core/proto"
 	"github.com/ofgp/ofgp-core/util/assert"
-
 	"github.com/spf13/viper"
 )
 
@@ -29,6 +28,7 @@ var (
 	NodeSigners      map[int32]*crypto.SecureSigner
 	MultiSigSnapshot MultiSigInfos
 	CurrMultiSig     MultiSigInfo
+	initNodeHeight   int64 // 引导节点监听到的高度
 )
 
 type MultiSigInfos struct {
@@ -151,6 +151,17 @@ func AddNodeInfo(nodeInfo NodeInfo) {
 	AccuseQuorumN = MaxFaultyN + 1
 }
 
+// IsNodeExist node 是否已经存在
+func IsNodeExist(nodeId int32) bool {
+	for _, node := range NodeList {
+		if node.Id == nodeId {
+			log.Println("node is already exist")
+			return true
+		}
+	}
+	return false
+}
+
 // NewNodeInfo 创建Node
 func NewNodeInfo(host string, nodeId int32, pubkey string, pubkeyHash string) NodeInfo {
 	if nodeId != int32(TotalNodeCount) {
@@ -255,4 +266,11 @@ func GetSnapshot() Snapshot {
 
 func DelSnapShot() {
 	ClusterSnapshot = nil
+}
+
+func SetInitNodeHeight(height int64) {
+	initNodeHeight = height
+}
+func GetInitNodeHeight() int64 {
+	return initNodeHeight
 }

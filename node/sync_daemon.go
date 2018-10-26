@@ -1,8 +1,10 @@
 package node
 
 import (
+	"encoding/hex"
 	"fmt"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/dgwdb"
@@ -10,7 +12,6 @@ import (
 	"github.com/ofgp/ofgp-core/primitives"
 	pb "github.com/ofgp/ofgp-core/proto"
 	"github.com/ofgp/ofgp-core/util/assert"
-
 	"github.com/spf13/viper"
 	context "golang.org/x/net/context"
 )
@@ -28,6 +29,14 @@ type SyncDaemon struct {
 	peerManager         *cluster.PeerManager
 	maxBlockTimeSection int64 //最大的两个block块之间的时间差
 	db                  *dgwdb.LDBDatabase
+	runSate             int32
+}
+
+func (sd *SyncDaemon) canRun() bool {
+	return atomic.CompareAndSwapInt32(&sd.runSate, 0, 1)
+}
+func (sd *SyncDaemon) finish() {
+	sd.runSate = 0
 }
 
 // NewSyncDaemon 新建一个SyncDaemon对象并返回
@@ -58,17 +67,20 @@ func (sd *SyncDaemon) Run(ctx context.Context) {
 	for {
 		select {
 		case nodeId := <-sd.peerToSyncChan:
-			var ignore bool
-			sd.mu.Lock()
-			if sd.isSyncUp[nodeId] {
-				ignore = true
-			} else {
-				ignore = false
-				sd.isSyncUp[nodeId] = true
-			}
-			sd.mu.Unlock()
+			// var ignore bool
+			// sd.mu.Lock()
+			// if sd.isSyncUp[nodeId] {
+			// 	ignore = true
+			// } else {
+			// 	ignore = false
+			// 	sd.isSyncUp[nodeId] = true
+			// }
+			// sd.mu.Unlock()
 
-			if !ignore {
+			// if !ignore {
+			// 	go sd.doSyncUp(nodeId)
+			// }
+			if sd.canRun() {
 				go sd.doSyncUp(nodeId)
 			}
 		case <-ctx.Done():
@@ -81,9 +93,10 @@ func (sd *SyncDaemon) Run(ctx context.Context) {
 // Normal watch模式同步数据
 func (sd *SyncDaemon) doSyncUp(nodeId int32) error {
 	defer func() {
-		sd.mu.Lock()
-		sd.isSyncUp[nodeId] = false
-		sd.mu.Unlock()
+		// sd.mu.Lock()
+		// sd.isSyncUp[nodeId] = false
+		// sd.mu.Unlock()
+		sd.finish()
 		sdLogger.Debug("Sync up done", "nodeId", nodeId)
 	}()
 
@@ -254,6 +267,28 @@ func (sd *SyncDaemon) processSimpleSyncUpResponse(rsp *pb.SyncUpResponse, accuse
 			sdLogger.Error("check block not pass")
 			break
 		}
+		if block.IsReconfigBlock() && cluster.GetInitNodeHeight() < block.Height() {
+			sdLogger.Debug("deal reconfig block")
+			reConfig := block.Block().Reconfig
+			if reConfig.Type == pb.Reconfig_JOIN && !cluster.IsNodeExist(reConfig.NodeId) {
+				pubKey, _ := hex.DecodeString(reConfig.Pubkey)
+				nodeInfo := cluster.NodeInfo{
+					Id:        reConfig.NodeId,
+					Name:      fmt.Sprintf("server%d", reConfig.NodeId),
+					Url:       reConfig.Host,
+					PublicKey: pubKey,
+					IsNormal:  true,
+				}
+				cluster.AddNodeInfo(nodeInfo)
+				sd.peerManager.AddNode(nodeInfo)
+			} else {
+				cluster.DeleteNode(reConfig.NodeId)
+				sd.peerManager.DeleteNode(reConfig.NodeId)
+			}
+			multiSig := getFederationAddress()
+			cluster.SetCurrMultiSig(multiSig)
+		}
+
 		bs.JustCommitIt(block)
 		bs.SetNodeTerm(block.Term())
 		height := block.Height()
