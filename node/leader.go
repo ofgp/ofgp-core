@@ -369,6 +369,9 @@ func (ld *Leader) watchFormerMultisig(ctx context.Context) {
 						} else {
 							watcher = ld.bchWatcher
 						}
+						if watcher == nil {
+							continue
+						}
 						utxoList := watcher.GetUnspentUtxo(address)
 						for {
 							if len(utxoList) == 0 {

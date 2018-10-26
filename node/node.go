@@ -187,15 +187,19 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 		if utxoLockTime == 0 {
 			utxoLockTime = defaultUtxoLockTime
 		}
-		bchWatcher, err = btcwatcher.NewMortgageWatcher("bch", viper.GetInt64("DGW.bch_height"),
-			multiSig.BchAddress, multiSig.BchRedeemScript, utxoLockTime)
-		if err != nil {
-			nodeLogger.Error("new bch watcher failed", "err", err)
+		if len(viper.GetString("BCH.rpc_server")) > 0 {
+			bchWatcher, err = btcwatcher.NewMortgageWatcher("bch", viper.GetInt64("DGW.bch_height"),
+				multiSig.BchAddress, multiSig.BchRedeemScript, utxoLockTime)
+			if err != nil {
+				panic(fmt.Sprintf("new bch watcher failed, err: %v", err))
+			}
 		}
-		btcWatcher, err = btcwatcher.NewMortgageWatcher("btc", viper.GetInt64("DGW.btc_height"),
-			multiSig.BtcAddress, multiSig.BtcRedeemScript, utxoLockTime)
-		if err != nil {
-			nodeLogger.Error("new btc watcher failed", "err", err)
+		if len(viper.GetString("BTC.rpc_server")) > 0 {
+			btcWatcher, err = btcwatcher.NewMortgageWatcher("btc", viper.GetInt64("DGW.btc_height"),
+				multiSig.BtcAddress, multiSig.BtcRedeemScript, utxoLockTime)
+			if err != nil {
+				panic(fmt.Sprintf("new btc watcher failed, err: %v", err))
+			}
 		}
 		ethURI := viper.GetString("DGW.eth_client_url")
 		if len(ethURI) > 0 {
@@ -1263,15 +1267,23 @@ func (bn *BraftNode) changeFederationAddrs(latest cluster.MultiSigInfo, multiSig
 	if len(multiSigs) > 0 {
 		for _, multiSig := range multiSigs {
 			nodeLogger.Debug("init old multisig address", "btc", multiSig.BtcAddress, "bch", multiSig.BchAddress)
-			bn.btcWatcher.ChangeFederationAddress(multiSig.BtcAddress, multiSig.BtcRedeemScript)
-			bn.bchWatcher.ChangeFederationAddress(multiSig.BchAddress, multiSig.BchRedeemScript)
+			if bn.btcWatcher != nil {
+				bn.btcWatcher.ChangeFederationAddress(multiSig.BtcAddress, multiSig.BtcRedeemScript)
+			}
+			if bn.bchWatcher != nil {
+				bn.bchWatcher.ChangeFederationAddress(multiSig.BchAddress, multiSig.BchRedeemScript)
+			}
 		}
 	}
 	//设置最新的multiSig
 	if latest.BchAddress != "" && latest.BtcAddress != "" {
 		nodeLogger.Debug("init latest multisig address", "btc", latest.BtcAddress, "bch", latest.BchAddress)
-		bn.btcWatcher.ChangeFederationAddress(latest.BtcAddress, latest.BtcRedeemScript)
-		bn.bchWatcher.ChangeFederationAddress(latest.BchAddress, latest.BchRedeemScript)
+		if bn.btcWatcher != nil {
+			bn.btcWatcher.ChangeFederationAddress(latest.BtcAddress, latest.BtcRedeemScript)
+		}
+		if bn.bchWatcher != nil {
+			bn.bchWatcher.ChangeFederationAddress(latest.BchAddress, latest.BchRedeemScript)
+		}
 	}
 }
 
