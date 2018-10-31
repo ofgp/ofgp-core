@@ -1158,7 +1158,7 @@ func (bs *BlockStore) validateBtcSignTx(req *pb.SignTxRequest, newlyTx *wire.Msg
 		outAddress := btcfunc.ExtractPkScriptAddr(txOut.PkScript, req.WatchedTx.To)
 		if req.WatchedTx.From == "xin" {
 			if priceInfo == nil {
-				priceInfo, err := bs.priceTool.GetPriceByTimestamp("BCH-USDT", int(ts))
+				priceInfo, err := bs.priceTool.GetPriceByTimestamp("BCH-USDT", ts)
 				if err != nil {
 					bsLogger.Error("get price info failed", "err", err, "sctxid", req.WatchedTx.Txid)
 					return wrongInputOutput
@@ -1270,7 +1270,7 @@ func (bs *BlockStore) validateXINSignTx(req *pb.SignTxRequest) int {
 		return wrongInputOutput
 	}
 
-	priceInfo, err := bs.priceTool.GetPriceByTimestamp("BCH-USDT", int(ts))
+	priceInfo, err := bs.priceTool.GetPriceByTimestamp("BCH-USDT", ts)
 	if err != nil {
 		bsLogger.Error("get price info failed", "err", err, "sctxid", req.WatchedTx.Txid)
 		return wrongInputOutput

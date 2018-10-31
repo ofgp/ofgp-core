@@ -385,6 +385,10 @@ func (ld *Leader) watchFormerMultisig(ctx context.Context) {
 							}
 							clusterSnapshot := ld.blockStore.GetClusterSnapshot(address)
 							transferTx := ld.createTransferTx(watcher, address, clusterSnapshot)
+							if transferTx == nil {
+								leaderLogger.Error("create transfer tx failed")
+								continue
+							}
 							signTxReq, err := pb.MakeSignTxMsg(ld.blockStore.GetNodeTerm(), ld.nodeInfo.Id,
 								watchedTxInfo, transferTx, address, ld.signer)
 							if err != nil {

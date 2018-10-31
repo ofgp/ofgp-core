@@ -69,7 +69,7 @@ func (t *PriceTool) GetCurrPrice(symbol string) (*PriceInfo, error) {
 }
 
 // GetPriceByTimestamp 获取指定交易对某个时间戳的币价
-func (t *PriceTool) GetPriceByTimestamp(symbol string, ts int) (*PriceInfo, error) {
-	url := strings.Join([]string{t.url, "pricebyts", symbol, strconv.Itoa(ts)}, "/")
+func (t *PriceTool) GetPriceByTimestamp(symbol string, ts int64) (*PriceInfo, error) {
+	url := strings.Join([]string{t.url, "pricebyts", symbol, strconv.FormatInt(ts, 10)}, "/")
 	return t.dial(url)
 }
