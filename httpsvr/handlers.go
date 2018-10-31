@@ -8,13 +8,11 @@ import (
 	"net/http"
 	"strconv"
 
-	pb "github.com/ofgp/ofgp-core/proto"
-
+	"github.com/julienschmidt/httprouter"
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/crypto"
 	"github.com/ofgp/ofgp-core/node"
-
-	"github.com/julienschmidt/httprouter"
+	pb "github.com/ofgp/ofgp-core/proto"
 )
 
 type httpHandlerFunc func()
@@ -397,6 +395,26 @@ func (hd *HTTPHandler) manualMint(w http.ResponseWriter, req *http.Request, _ ht
 		return
 	}
 	hd.node.ManualMint(param)
+	writeResponse(&w, newOKData(nil))
+}
+
+func (hd *HTTPHandler) addWatchedTx(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
+	chain := params.ByName("chain")
+	txID := params.ByName("txid")
+	if chain == "" || txID == "" {
+		fmt.Fprintf(w, "%s", newData(paramErrCode, "chain or txid is nil", nil))
+		return
+	}
+	if chain != "btc" && chain != "bch" && chain != "eth" {
+		fmt.Printf("add tx params chain:%s,txid:%s\n", chain, txID)
+		fmt.Fprintf(w, "%s", newData(paramErrCode, "chain err", nil))
+		return
+	}
+	err := hd.node.AddSideTx(txID, chain)
+	if err != nil {
+		fmt.Fprintf(w, "%s", newData(sysErrCode, err.Error(), nil))
+		return
+	}
 	writeResponse(&w, newOKData(nil))
 }
 
