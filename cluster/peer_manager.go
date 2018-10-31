@@ -12,6 +12,7 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/keepalive"
 )
 
 const (
@@ -86,7 +87,10 @@ func (pool *connPool) fetchConnectionFromPool() (conn *grpc.ClientConn, err erro
 
 		if conn == nil {
 			conn, err = grpc.Dial(pool.url, grpc.WithInsecure(), grpc.WithTimeout(connectionTimeout),
-				grpc.FailOnNonTempDialError(true))
+				grpc.FailOnNonTempDialError(true), grpc.WithKeepaliveParams(keepalive.ClientParameters{
+					Time:                time.Duration(60) * time.Second,
+					PermitWithoutStream: true,
+				}))
 			if err != nil {
 				if conn != nil {
 					conn.Close()
