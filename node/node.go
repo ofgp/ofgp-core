@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"encoding/hex"
+	"eosc/eoswatcher"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -15,8 +16,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"eosc/eoswatcher"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/ofgp/bitcoinWatcher/coinmanager"
@@ -35,6 +34,7 @@ import (
 	"github.com/ofgp/ofgp-core/util/assert"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 )
 
 const (
@@ -1296,7 +1296,13 @@ func RunNew(nodeInfo cluster.NodeInfo, multiSigInfos []cluster.MultiSigInfo) (*g
 	}
 
 	// 默认的流控大小为64K，改成1M和10M
-	grpcServer := grpc.NewServer(grpc.InitialWindowSize(1048576), grpc.InitialConnWindowSize(10485760))
+	grpcServer := grpc.NewServer(grpc.InitialWindowSize(1048576), grpc.InitialConnWindowSize(10485760), grpc.KeepaliveEnforcementPolicy(
+		keepalive.EnforcementPolicy{
+			MinTime:             (time.Duration(60) * time.Second),
+			PermitWithoutStream: true,
+		},
+	),
+	)
 
 	braftNode := NewBraftNode(nodeInfo)
 	nodeLogger.Debug("begin run braft node", "bchconfirm", BchConfirms, "ethconfirm", EthConfirms)
