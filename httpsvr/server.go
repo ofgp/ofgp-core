@@ -75,6 +75,6 @@ func StartHTTP(node *node.BraftNode, user, pwd, endpoint string, allowedOrigins 
 	//for wallet app
 	router.GET("/exconfig", basicAuth(hd.getExConfig, user, pwd))
 	router.GET("/mint_payload", basicAuth(hd.getMintPayload, user, pwd))
-	router.POST("/sidetx/chain/:chain/txid/:txid", basicAuth(hd.addWatchedTx, user, pwd))
+	router.POST("/sidetx/:chain/:txid", basicAuth(hd.addWatchedTx, user, pwd))
 	go http.ListenAndServe(endpoint, c.Handler(router))
 }
