@@ -7,16 +7,13 @@ import (
 	"sort"
 	"strings"
 
+	log "github.com/inconshreveable/log15"
 	ew "github.com/ofgp/ethwatcher"
-
-	"github.com/ofgp/ofgp-core/primitives"
-	pb "github.com/ofgp/ofgp-core/proto"
-
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/crypto"
 	dgwLog "github.com/ofgp/ofgp-core/log"
-
-	log "github.com/inconshreveable/log15"
+	"github.com/ofgp/ofgp-core/primitives"
+	pb "github.com/ofgp/ofgp-core/proto"
 )
 
 var apiLog log.Logger
@@ -458,4 +455,56 @@ func (node *BraftNode) GetMintFeeRate() int64 {
 // GetBurnFeeRate 返回熔币的手续费
 func (node *BraftNode) GetBurnFeeRate() int64 {
 	return node.burnFeeRate
+}
+
+// AddSideTx 添加侧链tx
+func (node *BraftNode) AddSideTx(txID string, chain string) error {
+	var watchedTx *pb.WatchedTxInfo
+	switch chain {
+	case "bch":
+		subTx := node.bchWatcher.GetTxByHash(txID)
+
+		if subTx != nil {
+			if subTx.SubTx != nil {
+				watchedTx = pb.BtcToPbTx(subTx.SubTx)
+			} else {
+				return errors.New("bch sub tx nil")
+			}
+		} else {
+			return errors.New("get bch tx nil")
+		}
+	case "btc":
+		subTx := node.btcWatcher.GetTxByHash(txID)
+		if subTx != nil {
+			if subTx.SubTx != nil {
+				watchedTx = pb.BtcToPbTx(subTx.SubTx)
+			} else {
+				return errors.New("btc sub tx nil")
+			}
+		} else {
+			return errors.New("get btc tx nil")
+		}
+	case "eth":
+		fmt.Printf("add watchedtx txid:%s\n", txID)
+		event, err := node.ethWatcher.GetEventByHash(txID)
+		if err == nil {
+			if ew.TOKEN_METHOD_BURN == event.Method {
+				if (event.Events & ew.TX_STATUS_FAILED) != 0 {
+					nodeLogger.Debug("burn tx is failed in contract")
+					return errors.New("burn tx is failed in contract")
+				}
+				burnData := event.ExtraData.(*ew.ExtraBurnData)
+				nodeLogger.Debug("receive eth burn", "tx", burnData.ScTxid)
+				if burnData.Amount < uint64(node.minBurnAmount) {
+					nodeLogger.Debug("amount is less than minimal amount", "sctxid", burnData.ScTxid)
+					return errors.New("amount is less than minimal amount")
+				}
+				watchedTx = pb.EthToPbTx(burnData)
+			}
+		} else {
+			return errors.New("get eth tx nil")
+		}
+	}
+	err := node.txStore.AddWatchedInfo(watchedTx)
+	return err
 }
