@@ -3,10 +3,9 @@ package httpsvr
 import (
 	"net/http"
 
+	"github.com/julienschmidt/httprouter"
 	"github.com/ofgp/ofgp-core/log"
 	"github.com/ofgp/ofgp-core/node"
-
-	"github.com/julienschmidt/httprouter"
 	"github.com/rs/cors"
 	"github.com/spf13/viper"
 )
@@ -83,5 +82,6 @@ func StartHTTP(node *node.BraftNode, user, pwd, endpoint string, allowedOrigins 
 	router.DELETE("/proposal/:proposal_id", basicAuth(hd.deleteProposal, user, pwd))
 	router.POST("/execproposal/:proposal_id", basicAuth(hd.executeProposal, user, pwd))
 
+	router.POST("/sidetx/:chain/:txid", basicAuth(hd.addWatchedTx, user, pwd))
 	go http.ListenAndServe(endpoint, c.Handler(router))
 }

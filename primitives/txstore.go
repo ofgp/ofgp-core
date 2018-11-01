@@ -3,6 +3,7 @@ package primitives
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"sync"
 	"time"
 
@@ -254,6 +255,31 @@ func (ts *TxStore) TestAddTxs(txs []*pb.Transaction) []int {
 // AddWatchedTx 添加监听到的公链交易到内存池
 func (ts *TxStore) AddWatchedTx(tx *pb.WatchedTxInfo) {
 	ts.addWatchedTxChan <- tx
+}
+
+// AddWatchedInfo 添加公链交易至内存（不添加到代签名交易）
+func (ts *TxStore) AddWatchedInfo(tx *pb.WatchedTxInfo) error {
+	ts.Lock()
+	defer ts.Unlock()
+	wtx := &WatchedTxInfo{
+		Tx:                 tx,
+		genTs:              time.Now(),
+		calcOverdueTs:      time.Now(),
+		txWaitingTolerance: defaultTxWaitingTolerance,
+	}
+	if _, exist := ts.watchedTxInfo[tx.Txid]; !exist {
+		if !ts.HasTxInDB(tx.Txid) {
+			ts.watchedTxInfo[tx.Txid] = wtx
+			bsLogger.Debug("add watchedTxInfo", "scTxID", tx.Txid)
+		} else {
+			bsLogger.Debug("tx exist in db", "scTxID", tx.Txid)
+			return errors.New("tx exist in db")
+		}
+	} else {
+		bsLogger.Debug("tx exist in mem", "scTxID", tx.Txid)
+		return errors.New("tx exist in mem")
+	}
+	return nil
 }
 
 // AddFreshWatchedTx 增加新监听到的交易到待处理列表
