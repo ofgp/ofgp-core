@@ -490,25 +490,28 @@ func (ld *Leader) createTransferTx(watcher *btcwatcher.MortgageWatcher, address 
 }
 
 func (ld *Leader) createBtcTx(watchedTx *pb.WatchedTxInfo, chainType string) *pb.NewlyTx {
-	var watcherAddressInfo []*btcwatcher.AddressInfo
-	var watcher *btcwatcher.MortgageWatcher
+	var (
+		watcherAddressInfo []*btcwatcher.AddressInfo
+		watcher            *btcwatcher.MortgageWatcher
+		priceInfo          *price.PriceInfo
+		timestamp          int64
+		amount             int64
+		symbol             string
+		err                error
+	)
+
 	if chainType == "bch" {
 		watcher = ld.bchWatcher
+		symbol = "BCH-USD"
 	} else {
 		watcher = ld.btcWatcher
+		symbol = "BTC-USD"
 	}
-
-	var (
-		priceInfo *price.PriceInfo
-		timestamp int64
-		amount    int64
-		err       error
-	)
 
 	for _, a := range watchedTx.RechargeList {
 		if watchedTx.From == "xin" {
 			if priceInfo == nil {
-				priceInfo, err = ld.priceTool.GetCurrPrice("BCH-USDT")
+				priceInfo, err = ld.priceTool.GetCurrPrice(symbol)
 				if err != nil {
 					leaderLogger.Error("get price failed", "err", err, "sctxid", watchedTx.Txid)
 					return nil
@@ -566,7 +569,16 @@ func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 
 // 暂时没有收取手续费
 func (ld *Leader) createXINTx(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
-	priceInfo, err := ld.priceTool.GetCurrPrice("BCH-USDT")
+	var symbol string
+	if watchedTx.From == "bch" {
+		symbol = "BCH-USD"
+	} else if watchedTx.From == "btc" {
+		symbol = "BTC-USD"
+	} else {
+		leaderLogger.Error("create xin tx failed", "from", watchedTx.From)
+		return nil
+	}
+	priceInfo, err := ld.priceTool.GetCurrPrice(symbol)
 	if err != nil {
 		leaderLogger.Error("get price failed", "err", err, "sctxid", watchedTx.Txid)
 		return nil
