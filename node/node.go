@@ -651,7 +651,7 @@ func (bn *BraftNode) regularSyncUp(ctx context.Context) {
 }
 
 func (bn *BraftNode) checkSubTx(tx *btcwatcher.SubTransaction) bool {
-	if !bn.ethWatcher.VerifyAppInfo(tx.From, tx.TokenFrom, tx.TokenTo) {
+	if tx.To == "eth" && !bn.ethWatcher.VerifyAppInfo(tx.From, tx.TokenFrom, tx.TokenTo) {
 		nodeLogger.Warn("verify app info not passed", "scTxid", tx.ScTxid)
 		return false
 	}

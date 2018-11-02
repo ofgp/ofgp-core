@@ -437,6 +437,7 @@ func (hd *HTTPHandler) deleteProposal(w http.ResponseWriter, req *http.Request, 
 func (hd *HTTPHandler) executeProposal(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
 	proposalID := params.ByName("proposal_id")
 	hd.node.ExecuteProposal(proposalID)
+	writeResponse(&w, newOKData(nil))
 }
 
 func (hd *HTTPHandler) addWatchedTx(w http.ResponseWriter, req *http.Request, params httprouter.Params) {
