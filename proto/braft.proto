@@ -29,6 +29,7 @@ service Braft {
     rpc IsCommited(crypto.Digest256) returns(IsCommitedResponse);
     //获取节点运行中的info,监听的区块的高度和成为主节点的次数
     rpc GetNodeRuntimeInfo(Void)returns(NodeRuntimeInfo);
+    rpc NotifyHeatbeat(HeatbeatMsg) returns(Void);
 }
 
 message EchoRequest {
@@ -330,4 +331,9 @@ message NodeRuntimeInfo{
     int64 bchHeight = 3;
     int64 ethHeight = 4;
     int32 leaderCnt = 5;
+}
+
+message HeatbeatMsg{
+    int64 term = 1;
+    repeated Vote votes = 2;
 }

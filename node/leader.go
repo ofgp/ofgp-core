@@ -153,7 +153,7 @@ func (ld *Leader) Run(ctx context.Context) {
 				if len(txs) > 0 {
 					ld.tryCreateBlock(txs)
 				} else {
-					ld.tryCreateBlock(nil)
+					// ld.tryCreateBlock(nil)
 				}
 			}
 		case newTerm := <-ld.newTermChan:
@@ -621,4 +621,16 @@ func (ld *Leader) broadcastSign(msg *pb.SignTxRequest, nodes []cluster.NodeInfo,
 			go ld.pm.NotifySignTx(node.Id, msg)
 		}
 	}
+}
+
+func (ld *Leader) doHeatbeat() {
+	votes := make([]*pb.Vote, 0)
+	for _, vote := range ld.votes {
+		votes = append(votes, vote)
+	}
+	msg := &pb.HeatbeatMsg{
+		Term:  ld.term,
+		Votes: votes,
+	}
+	ld.pm.Broadcast(msg, true, false)
 }

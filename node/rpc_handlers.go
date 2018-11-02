@@ -175,6 +175,20 @@ func (bn *BraftNode) NotifyLeave(ctx context.Context, msg *pb.LeaveRequest) (*pb
 	return new(pb.Void), nil
 }
 
+// NotifyHeatbeat 处理心跳消息
+func (bn *BraftNode) NotifyHeatbeat(ct context.Context, msg *pb.HeatbeatMsg) (*pb.Void, error) {
+	nodeLogger.Debug("Received heatbeat msg")
+	for _, vote := range msg.Votes {
+		if !checkVote(vote) {
+			nodeLogger.Warn("heat beat check vote fail")
+			bn.accuser.OnHeatbeatFail(struct{}{})
+			return new(pb.Void), nil
+		}
+	}
+	bn.accuser.OnHeatbeatSuc(msg)
+	return new(pb.Void), nil
+}
+
 // GetClusterNodes 处理获取集群节点列表的请求
 func (bn *BraftNode) GetClusterNodes(ctx context.Context, msg *pb.Void) (*pb.NodeList, error) {
 	nodeLogger.Debug("Received get cluster nodes request")
