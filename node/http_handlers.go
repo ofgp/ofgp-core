@@ -533,6 +533,7 @@ func (node *BraftNode) AddSideTx(txID string, chain string) error {
 		}
 	case "eos":
 		event, err := node.xinWatcher.GetEventByTxid(txID)
+		// nodeLogger.Debug("get eos event", "account", event.Account, "name", event.Name, "memo", event.Memo, "amount", event.Amount, "block", event.BlockNum, "index", event.Index)
 		if err != nil {
 			nodeLogger.Error("get eos err", "err", err, "scTxID", txID)
 			return err

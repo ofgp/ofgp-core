@@ -951,6 +951,7 @@ type eosMemo struct {
 // XINToPbTx XIN链监听到的交易转pb结构
 func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 	if tx.GetAmount() <= 0 {
+		log.Printf("xin to pbtx amount <=0 amount:%d\n", tx.GetAmount())
 		return nil
 	}
 	watchedTx := &WatchedTxInfo{
@@ -965,6 +966,7 @@ func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 	memo := &eosMemo{}
 	err := json.Unmarshal(tx.GetData(), memo)
 	if err != nil {
+		log.Printf("unmarshal eosevent data err:%v,data:%s\n", err, tx.GetData())
 		return nil
 	}
 	watchedTx.RechargeList = append(watchedTx.RechargeList, &AddressInfo{
