@@ -446,7 +446,7 @@ func (hd *HTTPHandler) addWatchedTx(w http.ResponseWriter, req *http.Request, pa
 		fmt.Fprintf(w, "%s", newData(paramErrCode, "chain or txid is nil", nil))
 		return
 	}
-	if chain != "btc" && chain != "bch" && chain != "eth" {
+	if chain != "btc" && chain != "bch" && chain != "eth" && chain != "eos" {
 		fmt.Printf("add tx params chain:%s,txid:%s\n", chain, txID)
 		fmt.Fprintf(w, "%s", newData(paramErrCode, "chain err", nil))
 		return
