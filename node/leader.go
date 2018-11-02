@@ -147,6 +147,7 @@ func (ld *Leader) Run(ctx context.Context) {
 		select {
 		case <-tick:
 			nodeLogger.Debug("tick...")
+			ld.doHeatbeat()
 			if ld.readyToInitNewBlock() {
 				nodeLogger.Debug("leader ready to init new block", "term", ld.term)
 				txs := ld.txStore.GetMemTxs()
