@@ -966,7 +966,7 @@ func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 	memo := &eosMemo{}
 	err := json.Unmarshal(tx.GetData(), memo)
 	if err != nil {
-		log.Printf("unmarshal eosevent data err:%v,data:%s\n", err, tx.GetData())
+		log.Printf("unmarshal xinevent data err:%v,data:%s\n", err, tx.GetData())
 		return nil
 	}
 	watchedTx.RechargeList = append(watchedTx.RechargeList, &AddressInfo{
