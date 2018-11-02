@@ -9,10 +9,9 @@ import (
 
 	log "github.com/inconshreveable/log15"
 	ew "github.com/ofgp/ethwatcher"
-
-	"github.com/ofgp/ofgp-core/distribution"
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/crypto"
+	"github.com/ofgp/ofgp-core/distribution"
 	dgwLog "github.com/ofgp/ofgp-core/log"
 	"github.com/ofgp/ofgp-core/primitives"
 	pb "github.com/ofgp/ofgp-core/proto"
@@ -531,6 +530,20 @@ func (node *BraftNode) AddSideTx(txID string, chain string) error {
 			}
 		} else {
 			return errors.New("get eth tx nil")
+		}
+	case "eos":
+		event, err := node.xinWatcher.GetEventByTxid(txID)
+		if err != nil {
+			nodeLogger.Error("get eos err", "err", err, "scTxID", txID)
+			return err
+		}
+		if event != nil {
+			watchedTx = pb.XINToPbTx(event)
+			if watchedTx == nil {
+				return errors.New("eos event to watched err")
+			}
+		} else {
+			return errors.New("get eos tx nil")
 		}
 	}
 	err := node.txStore.AddWatchedInfo(watchedTx)
