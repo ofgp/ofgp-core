@@ -161,15 +161,17 @@ func (pm *ProposalManager) SetDealing(proposalID string) {
 
 func genWatchedTx(p *Proposal) *pb.WatchedTxInfo {
 	res := &pb.WatchedTxInfo{
-		Txid: "DistributionTx" + p.ID,
-		From: p.Chain,
-		To:   p.Chain,
+		Txid:   "DistributionTx" + p.ID,
+		From:   p.Chain,
+		To:     p.Chain,
+		Amount: 0,
 	}
 	for _, o := range p.Data {
 		res.RechargeList = append(res.RechargeList, &pb.AddressInfo{
 			Address: o.Address,
 			Amount:  o.Amount,
 		})
+		res.Amount += o.Amount
 	}
 	return res
 }

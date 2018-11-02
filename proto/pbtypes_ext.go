@@ -946,6 +946,7 @@ func EthToPbTx(tx *ethwatcher.ExtraBurnData) *WatchedTxInfo {
 
 type eosMemo struct {
 	Address string `json:"address"`
+	Chain   string `json:"chain"`
 }
 
 // XINToPbTx XIN链监听到的交易转pb结构
@@ -954,20 +955,26 @@ func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 		log.Printf("xin to pbtx amount <=0 amount:%d\n", tx.GetAmount())
 		return nil
 	}
+	memo := &eosMemo{}
+	err := json.Unmarshal(tx.GetData(), memo)
+	if err != nil {
+		return nil
+	}
+	if memo.Chain != "btc" && memo.Chain != "bch" {
+		return nil
+	}
+	_, err = coinmanager.DecodeAddress(memo.Address, memo.Chain)
+	if err != nil {
+		return nil
+	}
 	watchedTx := &WatchedTxInfo{
 		Txid:      tx.GetTxID(),
 		Amount:    int64(tx.GetAmount()),
 		From:      "xin",
-		To:        "bch",
+		To:        memo.Chain,
 		TokenFrom: 1,
 		TokenTo:   0,
 		Fee:       0,
-	}
-	memo := &eosMemo{}
-	err := json.Unmarshal(tx.GetData(), memo)
-	if err != nil {
-		log.Printf("unmarshal xinevent data err:%v,data:%s\n", err, tx.GetData())
-		return nil
 	}
 	watchedTx.RechargeList = append(watchedTx.RechargeList, &AddressInfo{
 		Amount:  int64(tx.GetAmount()),
