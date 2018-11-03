@@ -952,18 +952,22 @@ type eosMemo struct {
 // XINToPbTx XIN链监听到的交易转pb结构
 func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 	if tx.GetAmount() <= 0 {
+		log.Printf("xin to pbtx amount <=0 amount:%d\n", tx.GetAmount())
 		return nil
 	}
 	memo := &eosMemo{}
 	err := json.Unmarshal(tx.GetData(), memo)
 	if err != nil {
+		log.Printf("unmarshal memo err:%v,data:%s\n", err, tx.GetData())
 		return nil
 	}
 	if memo.Chain != "btc" && memo.Chain != "bch" {
+		log.Printf("xin chain type err chain:%s\n", memo.Chain)
 		return nil
 	}
 	_, err = coinmanager.DecodeAddress(memo.Address, memo.Chain)
 	if err != nil {
+		log.Printf("xin decode adrr err:%v,addr:%s,chain:%s\n", err, memo.Address, memo.Chain)
 		return nil
 	}
 	watchedTx := &WatchedTxInfo{

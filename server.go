@@ -155,7 +155,7 @@ func run(ctx *cli.Context) {
 		}
 	}
 	if startMode != cluster.ModeWatch && startMode != cluster.ModeTest && nodeInfo.Url == "" {
-		panic("get no node info")
+		panic(fmt.Sprintf("get no node info startmode:%d", startMode))
 	}
 
 	httpPort := viper.GetInt("DGW.local_http_port")
