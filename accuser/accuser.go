@@ -45,6 +45,7 @@ type Accuser struct {
 	termToAccuse              int64
 	lastTermBlockTime         time.Time
 	hasCommittedInCurrentTerm bool
+	hasHeatbeatInCurrentTerm  bool //当前term是否收到heatbeat消息
 	blockIntervalTolerance    time.Duration
 
 	lastHeatbeatTime           time.Time
@@ -123,7 +124,7 @@ func (ac *Accuser) Run(ctx context.Context) {
 			acLogger.Info("receive heatbeat msg, update lastHeatbeattime")
 			ac.termToAccuse = heatBeatMsg.Term
 			ac.lastHeatbeatTime = time.Now()
-			ac.heartbeatTimer.Reset(heartbeatInterval)
+			ac.hasHeatbeatInCurrentTerm = true
 		// case newTop := <-ac.newCommittedChan:
 		// 	acLogger.Info("new committed event, update lastTermBlockTime")
 		// 	ac.termToAccuse = newTop.Term()
@@ -138,6 +139,7 @@ func (ac *Accuser) Run(ctx context.Context) {
 			ac.hasCommittedInCurrentTerm = false
 
 		case <-ac.heartbeatTimer.C:
+			ac.heartbeatTimer.Reset(heartbeatInterval)
 			now := time.Now()
 			if now.After(ac.lastTermBlockTime.Add(ac.blockIntervalTolerance)) {
 				// 当tolerance时间内都没有新区块能共识，就accuse
@@ -151,7 +153,7 @@ func (ac *Accuser) Run(ctx context.Context) {
 				// acLogger.Debug("block timeout accuse", "now", now, "last", ac.lastTermBlockTime, "tole", ac.blockIntervalTolerance)
 				// ac.accuse(ac.termToAccuse, "Block interval too long", time.Now().Unix())
 				// break
-				if ac.termToAccuse > ac.lastAccuseTerm {
+				if !ac.hasHeatbeatInCurrentTerm && ac.termToAccuse > ac.lastAccuseTerm {
 					ac.heartbeatIntervalTolerance *= 2
 					if ac.heartbeatIntervalTolerance > maxHeatbeatIntervalTolerance {
 						ac.heartbeatIntervalTolerance = maxHeatbeatIntervalTolerance
