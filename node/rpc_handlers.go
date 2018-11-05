@@ -177,7 +177,7 @@ func (bn *BraftNode) NotifyLeave(ctx context.Context, msg *pb.LeaveRequest) (*pb
 
 // NotifyHeatbeat 处理心跳消息
 func (bn *BraftNode) NotifyHeatbeat(ct context.Context, msg *pb.HeatbeatMsg) (*pb.Void, error) {
-	nodeLogger.Debug("Received heatbeat msg")
+	nodeLogger.Debug("Received heatbeat msg", "term", msg.Term)
 	for _, vote := range msg.Votes {
 		if !checkVote(vote) {
 			nodeLogger.Warn("heat beat check vote fail")

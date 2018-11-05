@@ -141,18 +141,20 @@ func (ac *Accuser) Run(ctx context.Context) {
 		case <-ac.heartbeatTimer.C:
 			ac.heartbeatTimer.Reset(heartbeatInterval)
 			now := time.Now()
-			if now.After(ac.lastTermBlockTime.Add(ac.blockIntervalTolerance)) {
-				// 当tolerance时间内都没有新区块能共识，就accuse
-				// if !ac.hasCommittedInCurrentTerm && ac.termToAccuse > ac.lastAccuseTerm {
-				// 	// 防止网络很差的时候节点不停的提升term来选主节点
-				// 	ac.blockIntervalTolerance *= 2
-				// 	if ac.blockIntervalTolerance > maxBlockIntervalTolerance {
-				// 		ac.blockIntervalTolerance = maxBlockIntervalTolerance
-				// 	}
-				// }
-				// acLogger.Debug("block timeout accuse", "now", now, "last", ac.lastTermBlockTime, "tole", ac.blockIntervalTolerance)
-				// ac.accuse(ac.termToAccuse, "Block interval too long", time.Now().Unix())
-				// break
+			// if now.After(ac.lastTermBlockTime.Add(ac.blockIntervalTolerance)) {
+			// 当tolerance时间内都没有新区块能共识，就accuse
+			// if !ac.hasCommittedInCurrentTerm && ac.termToAccuse > ac.lastAccuseTerm {
+			// 	// 防止网络很差的时候节点不停的提升term来选主节点
+			// 	ac.blockIntervalTolerance *= 2
+			// 	if ac.blockIntervalTolerance > maxBlockIntervalTolerance {
+			// 		ac.blockIntervalTolerance = maxBlockIntervalTolerance
+			// 	}
+			// }
+			// acLogger.Debug("block timeout accuse", "now", now, "last", ac.lastTermBlockTime, "tole", ac.blockIntervalTolerance)
+			// ac.accuse(ac.termToAccuse, "Block interval too long", time.Now().Unix())
+			// break
+			// }
+			if now.After(ac.lastHeatbeatTime.Add(ac.heartbeatIntervalTolerance)) {
 				if !ac.hasHeatbeatInCurrentTerm && ac.termToAccuse > ac.lastAccuseTerm {
 					ac.heartbeatIntervalTolerance *= 2
 					if ac.heartbeatIntervalTolerance > maxHeatbeatIntervalTolerance {
