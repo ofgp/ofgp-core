@@ -222,6 +222,11 @@ func (pm *PeerManager) Broadcast(msg interface{}, excludeSelf bool, selectSome b
 		nodeId := nodeId
 		sentN++
 		switch msg := msg.(type) {
+		case *pb.HeatbeatMsg:
+			pmLogger.Debug("Braodcast heatbeat msg", "nodeId", nodeId)
+			go func() {
+				pm.NotifyHeatbeat(nodeId, msg)
+			}()
 		case *pb.InitMsg:
 			pmLogger.Debug("Broadcast init msg", "nodeId", nodeId)
 			go func() { pm.NotifyInitMsg(nodeId, msg) }()
@@ -390,6 +395,17 @@ func (pm *PeerManager) NotifyLeave(nodeId int32, msg *pb.LeaveRequest) (*pb.Void
 	}
 	rsp := new(pb.Void)
 	err := node.invokeRPC("/proto.Braft/NotifyLeave", msg, rsp)
+	return rsp, err
+}
+
+// NotifyHeatbeat 向node节点发送心跳消息
+func (pm *PeerManager) NotifyHeatbeat(nodeId int32, msg *pb.HeatbeatMsg) (*pb.Void, error) {
+	node := pm.GetNode(nodeId)
+	if node == nil {
+		return nil, errInvalidNode
+	}
+	rsp := new(pb.Void)
+	err := node.invokeRPC("/proto.Braft/NotifyHeatbeat", msg, rsp)
 	return rsp, err
 }
 
