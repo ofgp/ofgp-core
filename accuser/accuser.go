@@ -12,10 +12,8 @@ import (
 )
 
 const (
-	heartbeatInterval             = 2 * time.Second
-	accuseCooldown                = 10 * time.Second
-	defaultBlockIntervalTolerance = 60 * time.Second
-	maxBlockIntervalTolerance     = 3 * 60 * time.Second
+	heartbeatInterval = 2 * time.Second
+	accuseCooldown    = 10 * time.Second
 
 	defaultHeatbeatIntervalTolerance = 60 * time.Second
 	maxHeatbeatIntervalTolerance     = 3 * 60 * time.Second
@@ -42,11 +40,9 @@ type Accuser struct {
 	lastAccuseTime   time.Time
 	lastAccuseTerm   int64
 
-	termToAccuse              int64
-	lastTermBlockTime         time.Time
-	hasCommittedInCurrentTerm bool
-	hasHeatbeatInCurrentTerm  bool //当前term是否收到heatbeat消息
-	blockIntervalTolerance    time.Duration
+	termToAccuse int64
+
+	hasHeatbeatInCurrentTerm bool //当前term是否收到heatbeat消息
 
 	lastHeatbeatTime           time.Time
 	heartbeatIntervalTolerance time.Duration //leader 心跳间隔
@@ -72,9 +68,7 @@ func NewAccuser(nodeInfo cluster.NodeInfo, signer *crypto.SecureSigner,
 		lastAccuseTerm: -1,
 
 		termToAccuse:               0,
-		lastTermBlockTime:          time.Now(),
-		hasCommittedInCurrentTerm:  false,
-		blockIntervalTolerance:     defaultBlockIntervalTolerance,
+		lastHeatbeatTime:           time.Now(),
 		heartbeatIntervalTolerance: defaultHeatbeatIntervalTolerance,
 	}
 	return ac
@@ -125,35 +119,13 @@ func (ac *Accuser) Run(ctx context.Context) {
 			ac.termToAccuse = heatBeatMsg.Term
 			ac.lastHeatbeatTime = time.Now()
 			ac.hasHeatbeatInCurrentTerm = true
-		// case newTop := <-ac.newCommittedChan:
-		// 	acLogger.Info("new committed event, update lastTermBlockTime")
-		// 	ac.termToAccuse = newTop.Term()
-		// 	ac.lastTermBlockTime = time.Now()
-		// 	ac.hasCommittedInCurrentTerm = true
-		// 	ac.blockIntervalTolerance = defaultBlockIntervalTolerance
 
 		case newTerm := <-ac.newTermChan:
 			acLogger.Debug("enter new term", "term", newTerm)
 			ac.termToAccuse = newTerm
-			ac.lastTermBlockTime = time.Now() //wait the first commit from now
-			ac.hasCommittedInCurrentTerm = false
-
 		case <-ac.heartbeatTimer.C:
 			ac.heartbeatTimer.Reset(heartbeatInterval)
 			now := time.Now()
-			// if now.After(ac.lastTermBlockTime.Add(ac.blockIntervalTolerance)) {
-			// 当tolerance时间内都没有新区块能共识，就accuse
-			// if !ac.hasCommittedInCurrentTerm && ac.termToAccuse > ac.lastAccuseTerm {
-			// 	// 防止网络很差的时候节点不停的提升term来选主节点
-			// 	ac.blockIntervalTolerance *= 2
-			// 	if ac.blockIntervalTolerance > maxBlockIntervalTolerance {
-			// 		ac.blockIntervalTolerance = maxBlockIntervalTolerance
-			// 	}
-			// }
-			// acLogger.Debug("block timeout accuse", "now", now, "last", ac.lastTermBlockTime, "tole", ac.blockIntervalTolerance)
-			// ac.accuse(ac.termToAccuse, "Block interval too long", time.Now().Unix())
-			// break
-			// }
 			if now.After(ac.lastHeatbeatTime.Add(ac.heartbeatIntervalTolerance)) {
 				if !ac.hasHeatbeatInCurrentTerm && ac.termToAccuse > ac.lastAccuseTerm {
 					ac.heartbeatIntervalTolerance *= 2
@@ -161,7 +133,7 @@ func (ac *Accuser) Run(ctx context.Context) {
 						ac.heartbeatIntervalTolerance = maxHeatbeatIntervalTolerance
 					}
 				}
-				acLogger.Debug("heatbeat timeout accuse", "now", now, "last", ac.lastTermBlockTime, "tole", ac.heartbeatIntervalTolerance)
+				acLogger.Debug("heatbeat timeout accuse", "now", now, "last", ac.lastHeatbeatTime, "tole", ac.heartbeatIntervalTolerance)
 				ac.accuse(ac.termToAccuse, "heatbeat timeout", time.Now().Unix())
 				break
 			}
