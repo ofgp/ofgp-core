@@ -253,7 +253,8 @@ func (ld *Leader) scanVotePool() {
 		ld.BecomeLeaderEvent.Emit(ld.nodeInfo, ld.term)
 		assert.True(ld.initing == nil)
 		//ld.tryCreateBlock(nil, nil)
-		ld.tryCreateBlock(nil)
+		// ld.tryCreateBlock(nil)
+		ld.doHeatbeat()
 	}
 }
 
