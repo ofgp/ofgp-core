@@ -147,7 +147,6 @@ func (ld *Leader) Run(ctx context.Context) {
 		select {
 		case <-tick:
 			nodeLogger.Debug("tick...")
-			ld.doHeatbeat()
 			if ld.readyToInitNewBlock() {
 				nodeLogger.Debug("leader ready to init new block", "term", ld.term)
 				txs := ld.txStore.GetMemTxs()
@@ -156,6 +155,7 @@ func (ld *Leader) Run(ctx context.Context) {
 				} else {
 					// ld.tryCreateBlock(nil)
 				}
+				ld.doHeatbeat()
 			}
 		case newTerm := <-ld.newTermChan:
 			ld.updateTerm(newTerm)
@@ -634,5 +634,5 @@ func (ld *Leader) doHeatbeat() {
 		Term:  ld.term,
 		Votes: votes,
 	}
-	ld.pm.Broadcast(msg, true, false)
+	ld.pm.Broadcast(msg, false, false)
 }
