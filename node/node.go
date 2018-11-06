@@ -935,6 +935,19 @@ func (bn *BraftNode) checkTxOnChain(tx *waitingConfirmTx, wg *sync.WaitGroup) {
 				bn.deleteFromWaiting(tx.msgId)
 			}
 		}
+	} else if tx.chainType == "eos" {
+		nodeLogger.Debug("begin filter eos tx", "sctxid", tx.msgId)
+		chainTx, _ := bn.eosWatcher.GetEventByTxid(tx.chainTxId)
+		if chainTx != nil {
+			if !tx.inMem {
+				tx.setInMem()
+			}
+			nodeLogger.Debug("eos block height", "lastirr", bn.xinWatcher.LastIrreversibleBlockNum, "txheight", chainTx.GetHeight())
+			if int64(bn.eosWatcher.LastIrreversibleBlockNum) >= chainTx.GetHeight() {
+				bn.txStore.CreateInnerTx(tx.chainTxId, tx.msgId, 0)
+				bn.deleteFromWaiting(tx.msgId)
+			}
+		}
 	}
 }
 
