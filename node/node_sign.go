@@ -3,20 +3,19 @@ package node
 import (
 	"bytes"
 	"encoding/hex"
+	"eosc/eoswatcher"
+	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/btcsuite/btcd/wire"
 	"github.com/eoscanada/eos-go"
 	"github.com/eoscanada/eos-go/ecc"
 	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
-
 	"github.com/ofgp/ofgp-core/cluster"
 	pb "github.com/ofgp/ofgp-core/proto"
 	"github.com/ofgp/ofgp-core/util/assert"
-
-	"sync/atomic"
-
-	"github.com/btcsuite/btcd/wire"
 	context "golang.org/x/net/context"
 )
 
@@ -99,6 +98,35 @@ func (node *BraftNode) clearOnFail(signReq *pb.SignTxRequest) {
 	}
 }
 
+// sendEOSTxToChain send eos transaction to chain
+func (node *BraftNode) sendEOSTxToChain(watcher eoswatcher.EOSWatcherInterface,
+	sigs [][][]byte, req *pb.SignTxRequest, signRes *pb.SignedResult) (newTxID string, err error) {
+	var tmpSigs []*ecc.Signature
+	for _, sig := range sigs {
+		s := &ecc.Signature{}
+		s.UnmarshalJSON(sig[0])
+		tmpSigs = append(tmpSigs, s)
+	}
+	pack := &eos.PackedTransaction{
+		Compression:       0,
+		PackedTransaction: req.NewlyTx.Data,
+	}
+	transfer, _ := pack.Unpack()
+	newlyTx, err := watcher.MergeSignedTx(transfer, tmpSigs...)
+	if err != nil {
+		leaderLogger.Error("merge sign tx failed", "err", err, "sctxid", signRes.TxId)
+		node.clearOnFail(req)
+		err = errors.New("erge sign tx failed")
+		return
+	}
+	_, err = watcher.SendTx(newlyTx)
+	if err != nil {
+		leaderLogger.Error("send signed tx to xin failed", "err", err, "sctxid", signRes.TxId)
+	}
+	newlyTxHash := hex.EncodeToString(newlyTx.ID())
+	return newlyTxHash, nil
+}
+
 func (node *BraftNode) sendTxToChain(chain string, tx []byte, sigs [][][]byte, signResult *pb.SignedResult, signReq *pb.SignTxRequest) {
 	if chain == "btc" || chain == "bch" {
 		var watcher *btcwatcher.MortgageWatcher
@@ -128,7 +156,7 @@ func (node *BraftNode) sendTxToChain(chain string, tx []byte, sigs [][][]byte, s
 			leaderLogger.Error("send signed tx to bch failed", "err", err, "sctxid", signResult.TxId)
 		}
 		node.blockStore.SignedTxEvent.Emit(newlyTxHash, signResult.TxId, signResult.To, signReq.WatchedTx.TokenTo)
-	} else {
+	} else if chain == "xin" {
 		var tmpSigs []*ecc.Signature
 		for _, sig := range sigs {
 			s := &ecc.Signature{}
@@ -151,6 +179,9 @@ func (node *BraftNode) sendTxToChain(chain string, tx []byte, sigs [][][]byte, s
 			leaderLogger.Error("send signed tx to xin failed", "err", err, "sctxid", signResult.TxId)
 		}
 		newlyTxHash := hex.EncodeToString(newlyTx.ID())
+		node.blockStore.SignedTxEvent.Emit(newlyTxHash, signResult.TxId, signResult.To, signReq.WatchedTx.TokenTo)
+	} else if chain == "eos" {
+		newlyTxHash, _ := node.sendEOSTxToChain(node.eosWatcher, sigs, signReq, signResult)
 		node.blockStore.SignedTxEvent.Emit(newlyTxHash, signResult.TxId, signResult.To, signReq.WatchedTx.TokenTo)
 	}
 }

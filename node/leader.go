@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	eos "github.com/eoscanada/eos-go"
 	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
 	ew "github.com/ofgp/ethwatcher"
 	"github.com/ofgp/ofgp-core/cluster"
@@ -62,6 +63,7 @@ type Leader struct {
 	btcWatcher *btcwatcher.MortgageWatcher
 	ethWatcher *ew.Client
 	xinWatcher *eoswatcher.EOSWatcher //xin chain is based on eos chain
+	eosWatcher *eoswatcher.EOSWatcherMain
 	priceTool  *price.PriceTool
 	pm         *cluster.PeerManager
 	sync.Mutex
@@ -441,6 +443,10 @@ func (ld *Leader) createTransaction(ctx context.Context) {
 						newlyTx = ld.createBtcTx(tx.Tx, "btc")
 					} else if tx.Tx.To == "xin" {
 						newlyTx = ld.createXINTx(tx.Tx)
+					} else if tx.Tx.To == "eos" {
+						contractAccount := viper.GetString("DGW.xin_contract_account")
+						transferAccount := viper.GetString("DGW.xin_transfer_account")
+						newlyTx = ld.createEOSTx(ld.eosWatcher, tx.Tx, contractAccount, transferAccount)
 					} else {
 						leaderLogger.Error("watched tx wrong type", "type", tx.Tx.To)
 						continue
@@ -596,6 +602,58 @@ func (ld *Leader) createXINTx(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 		return nil
 	}
 	transfer, err := ld.xinWatcher.CreateTx(action, 10*time.Minute)
+	if err != nil {
+		leaderLogger.Error("create xin transfer tx failed", "err", err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	pack, err := transfer.Pack(0)
+	if err != nil {
+		leaderLogger.Error("pack xin tx failed", "err", err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	return &pb.NewlyTx{Data: pack.PackedTransaction, Timestamp: priceInfo.Timestamp}
+}
+
+// createEOSTx create eos transaction
+func (ld *Leader) createEOSTx(watcher eoswatcher.EOSWatcherInterface,
+	watchedTx *pb.WatchedTxInfo, account, transferAccount string) *pb.NewlyTx {
+	var symbol string
+	if watchedTx.From == "bch" {
+		symbol = "BCH-USD"
+	} else if watchedTx.From == "btc" {
+		symbol = "BTC-USD"
+	} else if watchedTx.From == "eos" {
+		symbol = "EOS-USD"
+	} else {
+		leaderLogger.Error("create xin tx failed", "from", watchedTx.From)
+		return nil
+	}
+	priceInfo, err := ld.priceTool.GetCurrPrice(symbol)
+	if err != nil {
+		leaderLogger.Error("get price failed", "err", err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	if len(priceInfo.Err) > 0 {
+		leaderLogger.Error("get price failed", "err", priceInfo.Err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	// 目标token对标USD的比例是1000:1。
+	amount := float64(watchedTx.RechargeList[0].Amount) * float64(priceInfo.Price) / 100000.0
+
+	user := watchedTx.RechargeList[0].Address
+	action := &eos.Action{
+		Account: eos.AN(account),
+		Name:    eos.ActN("createtoken"),
+		Authorization: []eos.PermissionLevel{
+			{Actor: eos.AN(transferAccount), Permission: eos.PN("active")},
+		},
+		ActionData: eos.NewActionData(eoswatcher.CreateToken{
+			User:   eos.AN(user),
+			Amount: uint32(amount),
+		}),
+	}
+
+	transfer, err := watcher.CreateTx(action, 10*time.Minute)
 	if err != nil {
 		leaderLogger.Error("create xin transfer tx failed", "err", err, "sctxid", watchedTx.Txid)
 		return nil

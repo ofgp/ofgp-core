@@ -986,6 +986,31 @@ func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 	return watchedTx
 }
 
+// EOSToPbTx eosEvent->watchedInfo
+func EOSToPbTx(event *eoswatcher.EOSPushEvent) *WatchedTxInfo {
+	if event.GetAmount() <= 0 {
+		log.Printf("eos to pbtx amount<=0 amount:%d\n", event.GetAmount())
+		return nil
+	}
+	memo := &eosMemo{}
+	err := json.Unmarshal(event.GetData(), memo)
+	if err != nil {
+		log.Printf("unmarshal memo err:%v,data:%s\n", err, event.GetData())
+		return nil
+	}
+	//todo check addr
+	watchedTx := &WatchedTxInfo{
+		Txid:      event.GetTxID(),
+		Amount:    int64(event.GetAmount()),
+		From:      "eos",
+		To:        memo.Chain,
+		TokenFrom: 1,
+		TokenTo:   0,
+		Fee:       0,
+	}
+	return watchedTx
+}
+
 // IsTransferTx 判断WatchedTxInfo是否是一个多签地址的资产转移的交易
 func (tx *WatchedTxInfo) IsTransferTx() bool {
 	return tx.From == tx.To && strings.HasPrefix(tx.Txid, "TransferTx")
