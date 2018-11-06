@@ -87,7 +87,7 @@ type BlockStore struct {
 // NewBlockStore 生成一个BlockStore对象
 func NewBlockStore(db *dgwdb.LDBDatabase, ts *TxStore, btcWatcher *btcwatcher.MortgageWatcher,
 	bchWatcher *btcwatcher.MortgageWatcher, ethWatcher *ew.Client, xinWatcher *eoswatcher.EOSWatcher,
-	tool *price.PriceTool, signer *crypto.SecureSigner, localNodeId int32) *BlockStore {
+	eosWatcher *eoswatcher.EOSWatcherMain, tool *price.PriceTool, signer *crypto.SecureSigner, localNodeId int32) *BlockStore {
 	return &BlockStore{
 		db:           db,
 		ts:           ts,
@@ -96,6 +96,7 @@ func NewBlockStore(db *dgwdb.LDBDatabase, ts *TxStore, btcWatcher *btcwatcher.Mo
 		btcWatcher:   btcWatcher,
 		ethWatcher:   ethWatcher,
 		xinWatcher:   xinWatcher,
+		eosWatcher:   eosWatcher,
 		priceTool:    tool,
 		signedTxMap:  make(map[string]string),
 		localNodeId:  localNodeId,

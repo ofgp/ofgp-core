@@ -224,7 +224,7 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 	priceTool := price.NewPriceTool(viper.GetString("DGW.price_server"))
 	ts := primitives.NewTxStore(db)
 	proMgr := distribution.NewProposalManager(db, ts)
-	bs := primitives.NewBlockStore(db, ts, btcWatcher, bchWatcher, ethWatcher, xinWatcher, priceTool,
+	bs := primitives.NewBlockStore(db, ts, btcWatcher, bchWatcher, ethWatcher, xinWatcher, eosWatcher, priceTool,
 		signer, localNodeInfo.Id)
 
 	//交易相关连接池大小

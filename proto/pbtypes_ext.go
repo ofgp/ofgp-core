@@ -5,6 +5,7 @@ import (
 	"eosc/eoswatcher"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
@@ -961,15 +962,24 @@ func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 		log.Printf("unmarshal memo err:%v,data:%s\n", err, tx.GetData())
 		return nil
 	}
-	if memo.Chain != "btc" && memo.Chain != "bch" {
+	if memo.Chain != "btc" && memo.Chain != "bch" && memo.Chain != "eos" {
 		log.Printf("xin chain type err chain:%s\n", memo.Chain)
 		return nil
 	}
-	_, err = coinmanager.DecodeAddress(memo.Address, memo.Chain)
-	if err != nil {
-		log.Printf("xin decode adrr err:%v,addr:%s,chain:%s\n", err, memo.Address, memo.Chain)
-		return nil
+	if memo.Chain == "btc" || memo.Chain == "bch" {
+		_, err = coinmanager.DecodeAddress(memo.Address, memo.Chain)
+		if err != nil {
+			log.Printf("xin decode adrr err:%v,addr:%s,chain:%s\n", err, memo.Address, memo.Chain)
+			return nil
+		}
 	}
+	if memo.Chain == "eos" {
+		if !checkEosAddr(memo.Address) {
+			log.Printf("eosEvent addr wrong addr:%s", memo.Address)
+			return nil
+		}
+	}
+
 	watchedTx := &WatchedTxInfo{
 		Txid:      tx.GetTxID(),
 		Amount:    int64(tx.GetAmount()),
@@ -986,6 +996,14 @@ func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 	return watchedTx
 }
 
+func checkEosAddr(addr string) bool {
+	reg := regexp.MustCompile(`^[a-z1-5.]+$`)
+	if reg.MatchString(addr) {
+		return true
+	}
+	return false
+}
+
 // EOSToPbTx eosEvent->watchedInfo
 func EOSToPbTx(event *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 	if event.GetAmount() <= 0 {
@@ -998,7 +1016,10 @@ func EOSToPbTx(event *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 		log.Printf("unmarshal memo err:%v,data:%s\n", err, event.GetData())
 		return nil
 	}
-	//todo check addr
+	if !checkEosAddr(memo.Address) {
+		log.Printf("eosEvent addr wrong addr:%s", memo.Address)
+		return nil
+	}
 	watchedTx := &WatchedTxInfo{
 		Txid:      event.GetTxID(),
 		Amount:    int64(event.GetAmount()),
