@@ -974,7 +974,7 @@ func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 		}
 	}
 	if memo.Chain == "eos" {
-		if !checkEosAddr(memo.Address) {
+		if !checkEOSAddr(memo.Address) {
 			log.Printf("eosEvent addr wrong addr:%s", memo.Address)
 			return nil
 		}
@@ -996,8 +996,8 @@ func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 	return watchedTx
 }
 
-func checkEosAddr(addr string) bool {
-	reg := regexp.MustCompile(`^[a-z1-5.]+$`)
+func checkEOSAddr(addr string) bool {
+	reg := regexp.MustCompile(`^[a-z1-5.]{1,12}$`)
 	if reg.MatchString(addr) {
 		return true
 	}
@@ -1016,7 +1016,7 @@ func EOSToPbTx(event *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 		log.Printf("unmarshal memo err:%v,data:%s\n", err, event.GetData())
 		return nil
 	}
-	if !checkEosAddr(memo.Address) {
+	if !checkEOSAddr(memo.Address) {
 		log.Printf("eosEvent addr wrong addr:%s", memo.Address)
 		return nil
 	}
