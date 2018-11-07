@@ -212,12 +212,18 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 			}
 		}
 		xinURL := viper.GetString("DGW.xin_client_url")
+		localPubkeyHash := viper.GetString("KEYSTORE.local_pubkey_hash")
 		if len(xinURL) > 0 {
-			xinWatcher = eoswatcher.NewEosWatcher(xinURL, viper.GetString("KEYSTORE.local_pubkey_hash"), viper.GetString("DGW.xin_contract_account"), "destroytoken", "createtoken")
+			xinAccont := viper.GetString("DGW.xin_contract_account")
+			dbpath := viper.GetString("LEVELDB.xin_db_path")
+			xinWatcher = eoswatcher.NewEosWatcher(xinURL, localPubkeyHash,
+				xinAccont, "destroytoken", "createtoken", dbpath)
 		}
 		eosURL := viper.GetString("DGW.eos_client_url")
 		if len(eosURL) > 0 {
-			eosWatcher = eoswatcher.NewEosWatcherMain(eosURL, viper.GetString("KEYSTORE.local_pubkey_hash"), viper.GetString("DGW.eos_contract_account"))
+			eosAccount := viper.GetString("DGW.eos_dgateway_account")
+			dbpath := viper.GetString("LEVELDB.eos_db_path")
+			eosWatcher = eoswatcher.NewEosWatcherMain(eosURL, localPubkeyHash, eosAccount, dbpath)
 		}
 	}
 
