@@ -1029,6 +1029,10 @@ func EOSToPbTx(event *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 		TokenTo:   0,
 		Fee:       0,
 	}
+	watchedTx.RechargeList = append(watchedTx.RechargeList, &AddressInfo{
+		Amount:  int64(event.GetAmount()),
+		Address: memo.Address,
+	})
 	return watchedTx
 }
 

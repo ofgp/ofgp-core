@@ -594,6 +594,10 @@ func (ld *Leader) createXINTx(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 		leaderLogger.Error("get price failed", "err", priceInfo.Err, "sctxid", watchedTx.Txid)
 		return nil
 	}
+	if len(watchedTx.RechargeList) == 0 {
+		leaderLogger.Error("recharge list nil", "sctxid", watchedTx.Txid)
+		return nil
+	}
 	// 目标token对标USD的比例是1000:1。
 	amount := float64(watchedTx.RechargeList[0].Amount) * float64(priceInfo.Price) / 100000.0
 	action, err := ld.xinWatcher.XinPlayerCreateTokenAction(viper.GetString("DGW.xin_contract_account"), viper.GetString("DGW.xin_transfer_account"),

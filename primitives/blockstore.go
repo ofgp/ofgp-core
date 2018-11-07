@@ -466,7 +466,7 @@ func (bs *BlockStore) handleInitMsg(tasks *task.Queue, init *pb.InitMsg) {
 		newFresh := pb.NewBlockPack(init)
 		bsLogger.Debug("in handle init msg, begin validate txs")
 		allTxValid := bs.validateTxs(newFresh)
-		bsLogger.Debug("in handle init msg, validate txs done")
+		bsLogger.Debug("in handle init msg, validate txs done", "validres", allTxValid)
 
 		reconfigValid := bs.checkReconfigBlock(newFresh)
 
@@ -1148,6 +1148,15 @@ func (bs *BlockStore) validateTxs(blockPack *pb.BlockPack) int {
 				} else if tx.WatchedTx.To == "xin" {
 					ev, _ := bs.xinWatcher.GetEventByTxid(tx.NewlyTxId)
 					if ev == nil {
+						bsLogger.Error("validate xin tx onchain fail", "sctxid", tx.WatchedTx.Txid)
+						resultChan <- Invalid
+					} else {
+						resultChan <- Valid
+					}
+				} else if tx.WatchedTx.To == "eos" {
+					ev, _ := bs.eosWatcher.GetEventByTxid(tx.NewlyTxId)
+					if ev == nil {
+						bsLogger.Error("validate eos tx onchain fail", "sctxid", tx.WatchedTx.Txid)
 						resultChan <- Invalid
 					} else {
 						resultChan <- Valid
