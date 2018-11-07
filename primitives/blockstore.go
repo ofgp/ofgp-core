@@ -1368,10 +1368,17 @@ func (bs *BlockStore) validateXINSignTx(req *pb.SignTxRequest) int {
 	return wrongInputOutput
 }
 
+// getEOSAmountFromXin xin币跟美元比例为 1:1000
+func getEOSAmountFromXin(xinAmount int64, price float32, cointUint int64) int64 {
+	amount := (float64(xinAmount) * float64(cointUint)) / (1000.0 * float64(price))
+	return int64(amount)
+}
+
 // validateEOSSignTx 验证eos tx
 func (bs *BlockStore) validateEOSSignTx(req *pb.SignTxRequest) int {
 	baseCheckResult := bs.baseCheck(req)
 	if baseCheckResult != validatePass {
+		bsLogger.Error("base check tx err", "status", baseCheckResult, "sctxid", req.WatchedTx.Txid)
 		return baseCheckResult
 	}
 
@@ -1398,12 +1405,10 @@ func (bs *BlockStore) validateEOSSignTx(req *pb.SignTxRequest) int {
 	}
 
 	var symbol string
-	if req.WatchedTx.From == "bch" {
-		symbol = "BCH-USD"
-	} else if req.WatchedTx.From == "btc" {
-		symbol = "BTC-USD"
-	} else if req.WatchedTx.From == "eos" {
+	var coinUnit int64
+	if req.WatchedTx.From == "xin" {
 		symbol = "EOS-USD"
+		coinUnit = 10000
 	} else {
 		return wrongInputOutput
 	}
@@ -1416,10 +1421,11 @@ func (bs *BlockStore) validateEOSSignTx(req *pb.SignTxRequest) int {
 		bsLogger.Error("get price info failed", "err", priceInfo.Err, "sctxid", req.WatchedTx.Txid)
 		return wrongInputOutput
 	}
-	amount := float64(req.WatchedTx.RechargeList[0].Amount) * float64(priceInfo.Price) / 100000.0
-
+	amount := getEOSAmountFromXin(req.WatchedTx.RechargeList[0].Amount, float32(priceInfo.Price), coinUnit)
 	actionData := newlyTx.Actions[0].Data.(*eoswatcher.CreateToken)
 	if string(actionData.User) == req.WatchedTx.RechargeList[0].Address && actionData.Amount == uint32(amount) {
+		bsLogger.Error("eos tx action param not equal", "actionUser", string(actionData.User), "reqUser",
+			req.WatchedTx.RechargeList[0].Address, "actionAmount", actionData.Amount, "reqAmount", uint32(amount))
 		return validatePass
 	}
 	bsLogger.Error("validate xin tx failed", "actuser", actionData.User, "addr", req.WatchedTx.RechargeList[0].Address, "actamount", actionData.Amount, "amount", amount)

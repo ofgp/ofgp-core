@@ -617,7 +617,7 @@ func (ld *Leader) createXINTx(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 
 // getEOSAmountFromXin xin币跟美元比例为 1:1000
 func getEOSAmountFromXin(xinAmount int64, price float32, cointUint int64) int64 {
-	amount := float64(xinAmount) * float64(cointUint) / 1000.0 * float64(price)
+	amount := (float64(xinAmount) * float64(cointUint)) / (1000.0 * float64(price))
 	return int64(amount)
 }
 
