@@ -1326,6 +1326,7 @@ func (bs *BlockStore) validateEthSignTx(req *pb.SignTxRequest) int {
 func (bs *BlockStore) validateXINSignTx(req *pb.SignTxRequest) int {
 	baseCheckResult := bs.baseCheck(req)
 	if baseCheckResult != validatePass {
+		bsLogger.Error("base check err", "checkRes", baseCheckResult, "sctxid", req.WatchedTx.Txid)
 		return baseCheckResult
 	}
 
@@ -1363,6 +1364,7 @@ func (bs *BlockStore) validateXINSignTx(req *pb.SignTxRequest) int {
 		symbol = "EOS-USD"
 		coinUnit = 10000
 	} else {
+		bsLogger.Error("From type err", "formtype", req.WatchedTx.From, "sctxid", req.WatchedTx.Txid)
 		return wrongInputOutput
 	}
 	priceInfo, err := bs.priceTool.GetPriceByTimestamp(symbol, ts)
@@ -1507,6 +1509,12 @@ func (bs *BlockStore) validateWatchedTx(tx *pb.WatchedTxInfo) bool {
 				return false
 			}
 			newTx = pb.XINToPbTx(chainTx)
+		} else if tx.From == "eos" {
+			chainTx, err := bs.eosWatcher.GetEventByTxid(tx.Txid)
+			if err != nil {
+				return false
+			}
+			newTx = pb.EOSToPbTx(chainTx)
 		} else {
 			return false
 		}
