@@ -361,6 +361,29 @@ func (node *BraftNode) verifySign(chain string, tx []byte, sig [][]byte, nodeID 
 		}
 		nodePubkey, _ := node.xinWatcher.NewPublicKey(hex.EncodeToString(cluster.NodeList[nodeID].PublicKey))
 		return pubkey.String() == nodePubkey.String()
+	} else if chain == "eos" {
+		pack := &eos.PackedTransaction{
+			Compression:       0,
+			PackedTransaction: tx,
+		}
+		transfer, err := pack.Unpack()
+		if err != nil {
+			leaderLogger.Error("verify eos signtx upack err", "from", nodeID, "err", err)
+			return false
+		}
+		xinSig := &ecc.Signature{}
+		err = xinSig.UnmarshalJSON(sig[0])
+		if err != nil {
+			leaderLogger.Error("verify eos signtx UnmarshalJson err", "from", nodeID, "err", err)
+			return false
+		}
+		pubkey, err := node.eosWatcher.GetPublickeyFromTx(transfer, xinSig)
+		if err != nil {
+			leaderLogger.Error("verify eos signtx getPubkey err", "from", nodeID, "err", err)
+			return false
+		}
+		nodePubkey, _ := node.eosWatcher.NewPublicKey(hex.EncodeToString(cluster.NodeList[nodeID].PublicKey))
+		return pubkey.String() == nodePubkey.String()
 	}
 	return false
 }

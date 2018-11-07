@@ -14,6 +14,7 @@ import (
 
 	"github.com/btcsuite/btcd/wire"
 	"github.com/eoscanada/eos-go"
+	"github.com/eoscanada/eos-go/token"
 	btcfunc "github.com/ofgp/bitcoinWatcher/coinmanager"
 	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
 	ew "github.com/ofgp/ethwatcher"
@@ -1422,13 +1423,15 @@ func (bs *BlockStore) validateEOSSignTx(req *pb.SignTxRequest) int {
 		return wrongInputOutput
 	}
 	amount := getEOSAmountFromXin(req.WatchedTx.RechargeList[0].Amount, float32(priceInfo.Price), coinUnit)
-	actionData := newlyTx.Actions[0].Data.(*eoswatcher.CreateToken)
-	if string(actionData.User) == req.WatchedTx.RechargeList[0].Address && actionData.Amount == uint32(amount) {
-		bsLogger.Error("eos tx action param not equal", "actionUser", string(actionData.User), "reqUser",
-			req.WatchedTx.RechargeList[0].Address, "actionAmount", actionData.Amount, "reqAmount", uint32(amount))
+
+	transer := newlyTx.Actions[0].Data.(*token.Transfer)
+
+	if string(transer.To) == req.WatchedTx.RechargeList[0].Address && transer.Quantity.Amount == int64(amount) {
+		bsLogger.Error("eos tx action param not equal", "actionUser", string(transer.To), "reqUser",
+			req.WatchedTx.RechargeList[0].Address, "actionAmount", transer.Quantity.Amount, "reqAmount", int64(amount))
 		return validatePass
 	}
-	bsLogger.Error("validate xin tx failed", "actuser", actionData.User, "addr", req.WatchedTx.RechargeList[0].Address, "actamount", actionData.Amount, "amount", amount)
+	bsLogger.Error("validate xin tx failed", "actuser", string(transer.To), "addr", req.WatchedTx.RechargeList[0].Address, "actamount", transer.Quantity.Amount, "amount", amount)
 	return wrongInputOutput
 }
 
