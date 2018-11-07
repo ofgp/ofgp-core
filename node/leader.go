@@ -444,7 +444,7 @@ func (ld *Leader) createTransaction(ctx context.Context) {
 					} else if tx.Tx.To == "xin" {
 						newlyTx = ld.createXINTx(tx.Tx)
 					} else if tx.Tx.To == "eos" {
-						account := viper.GetString("DGW.eose_dgateway_account")
+						account := viper.GetString("DGW.eos_dgateway_account")
 						newlyTx = ld.createEOSTx(tx.Tx, account)
 					} else {
 						leaderLogger.Error("watched tx wrong type", "type", tx.Tx.To)
@@ -651,12 +651,12 @@ func (ld *Leader) createEOSTx(watchedTx *pb.WatchedTxInfo, account string) *pb.N
 	transfer, err := ld.eosWatcher.CreateTx(action, 10*time.Minute)
 
 	if err != nil {
-		leaderLogger.Error("create xin transfer tx failed", "err", err, "sctxid", watchedTx.Txid)
+		leaderLogger.Error("create eos transfer tx failed", "err", err, "sctxid", watchedTx.Txid)
 		return nil
 	}
 	pack, err := transfer.Pack(0)
 	if err != nil {
-		leaderLogger.Error("pack xin tx failed", "err", err, "sctxid", watchedTx.Txid)
+		leaderLogger.Error("pack eos tx failed", "err", err, "sctxid", watchedTx.Txid)
 		return nil
 	}
 	return &pb.NewlyTx{Data: pack.PackedTransaction, Timestamp: priceInfo.Timestamp}
