@@ -246,7 +246,7 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 	pm := cluster.NewPeerManager(localNodeInfo.Id, txConnPoolSize, blockPoolSize)
 
 	ac := accuser.NewAccuser(localNodeInfo, signer, pm)
-	ld := NewLeader(localNodeInfo, bs, ts, signer, btcWatcher, bchWatcher, ethWatcher, xinWatcher, priceTool, pm)
+	ld := NewLeader(localNodeInfo, bs, ts, signer, btcWatcher, bchWatcher, ethWatcher, xinWatcher, eosWatcher, priceTool, pm)
 	syncDaemon := NewSyncDaemon(db, bs, pm)
 
 	mintFeeRate := viper.GetInt64("BUS.mint_fee_rate")

@@ -71,7 +71,7 @@ type Leader struct {
 // NewLeader 新生成一个leader对象，并启动后台任务，循环检查选举相关任务（创建块，投票等）
 func NewLeader(nodeInfo cluster.NodeInfo, bs *primitives.BlockStore, ts *primitives.TxStore,
 	signer *crypto.SecureSigner, btcWatcher *btcwatcher.MortgageWatcher, bchWatcher *btcwatcher.MortgageWatcher,
-	ethWatcher *ew.Client, xinWatcher *eoswatcher.EOSWatcher, tool *price.PriceTool, pm *cluster.PeerManager) *Leader {
+	ethWatcher *ew.Client, xinWatcher *eoswatcher.EOSWatcher, eosWatcher *eoswatcher.EOSWatcherMain, tool *price.PriceTool, pm *cluster.PeerManager) *Leader {
 	leader := &Leader{
 		BecomeLeaderEvent: util.NewEvent(),
 		NewInitEvent:      util.NewEvent(),
@@ -99,6 +99,7 @@ func NewLeader(nodeInfo cluster.NodeInfo, bs *primitives.BlockStore, ts *primiti
 		btcWatcher: btcWatcher,
 		ethWatcher: ethWatcher,
 		xinWatcher: xinWatcher,
+		eosWatcher: eosWatcher,
 		priceTool:  tool,
 		pm:         pm,
 	}
@@ -642,8 +643,6 @@ func (ld *Leader) createEOSTx(watchedTx *pb.WatchedTxInfo, account string) *pb.N
 	}
 	// 目标token对标USD的比例是1000:1。
 	amount := getEOSAmountFromXin(watchedTx.RechargeList[0].Amount, priceInfo.Price, coinUnit)
-
-	user := watchedTx.RechargeList[0].Address
 
 	receiver := watchedTx.RechargeList[0].Address
 	leaderLogger.Debug("create eos action praram", "from", account, "to", receiver, "amount", int64(amount), "sctxid", watchedTx.GetTxid())
