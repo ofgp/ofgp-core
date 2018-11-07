@@ -1352,10 +1352,16 @@ func (bs *BlockStore) validateXINSignTx(req *pb.SignTxRequest) int {
 	}
 
 	var symbol string
+	var coinUnit int64
 	if req.WatchedTx.From == "bch" {
 		symbol = "BCH-USD"
+		coinUnit = 100000000
 	} else if req.WatchedTx.From == "btc" {
 		symbol = "BTC-USD"
+		coinUnit = 100000000
+	} else if req.WatchedTx.From == "eos" {
+		symbol = "EOS-USD"
+		coinUnit = 10000
 	} else {
 		return wrongInputOutput
 	}
@@ -1368,7 +1374,7 @@ func (bs *BlockStore) validateXINSignTx(req *pb.SignTxRequest) int {
 		bsLogger.Error("get price info failed", "err", priceInfo.Err, "sctxid", req.WatchedTx.Txid)
 		return wrongInputOutput
 	}
-	amount := float64(req.WatchedTx.RechargeList[0].Amount) * float64(priceInfo.Price) / 100000.0
+	amount := float64(req.WatchedTx.RechargeList[0].Amount) * float64(priceInfo.Price) * 1000 / float64(coinUnit)
 
 	actionData := newlyTx.Actions[0].Data.(*eoswatcher.CreateToken)
 	if string(actionData.User) == req.WatchedTx.RechargeList[0].Address && actionData.Amount == uint32(amount) {
