@@ -423,6 +423,7 @@ func (bs *BlockStore) HandleSignTx(req *pb.SignTxRequest) {
 	end := time.Now().UnixNano()
 	bsLogger.Debug("hanleSignTime", "time", (end-start)/1e6)
 	deferredEvents.ExecAll()
+	bsLogger.Debug("sign tx end", "sctxid", req.WatchedTx.Txid)
 }
 
 func (bs *BlockStore) updateNodeTermWithInit(tasks *task.Queue, init *pb.InitMsg) bool {

@@ -210,6 +210,7 @@ func (node *BraftNode) sendTxToChain(newlyTx *wire.MsgTx, watcher *btcwatcher.Mo
 */
 
 func (node *BraftNode) doSave(msg *pb.SignedResult) {
+	leaderLogger.Debug("receive signres", "sctxid", msg.TxId)
 	if node.blockStore.IsSignFailed(msg.TxId, msg.Term) {
 		leaderLogger.Debug("signmsg is failed in this term", "sctxid", msg.TxId, "term", msg.Term)
 		return
@@ -339,28 +340,39 @@ func (node *BraftNode) verifySign(chain string, tx []byte, sig [][]byte, nodeID 
 		}
 		return true
 	} else if chain == "xin" {
+		if len(tx) == 0 {
+			leaderLogger.Error("verify xin signtx tx is nil", "from", nodeID)
+			return false
+		}
 		pack := &eos.PackedTransaction{
 			Compression:       0,
 			PackedTransaction: tx,
 		}
 		transfer, err := pack.Unpack()
 		if err != nil {
-			leaderLogger.Error("verify sign tx failed", "from", nodeID, "err", err)
+			leaderLogger.Error("verify xin signtx unpack failed", "from", nodeID, "err", err)
 			return false
 		}
 		xinSig := &ecc.Signature{}
 		err = xinSig.UnmarshalJSON(sig[0])
 		if err != nil {
-			leaderLogger.Error("verify sign tx failed", "from", nodeID, "err", err)
+			leaderLogger.Error("verify xin signtx  Unmarshaljson failed", "from", nodeID, "err", err)
 			return false
 		}
 		pubkey, err := node.xinWatcher.GetPublickeyFromTx(transfer, xinSig)
 		if err != nil {
-			leaderLogger.Error("verify sign tx failed", "from", nodeID, "err", err)
+			leaderLogger.Error("verify xin signtx getpubkey failed", "from", nodeID, "err", err)
 			return false
 		}
-		nodePubkey, _ := node.xinWatcher.NewPublicKey(hex.EncodeToString(cluster.NodeList[nodeID].PublicKey))
-		return pubkey.String() == nodePubkey.String()
+		nodePubkey, err := node.xinWatcher.NewPublicKey(hex.EncodeToString(cluster.NodeList[nodeID].PublicKey))
+		if err != nil {
+			leaderLogger.Error("verify xin signtx getpubkeyfromnode failed", nodeID, "err", err)
+		}
+		isEqual := pubkey.String() == nodePubkey.String()
+		if !isEqual {
+			leaderLogger.Error("pubkey not equal", "txpubkey", pubkey.String(), "nodepubkey", nodePubkey.String())
+		}
+		return isEqual
 	} else if chain == "eos" {
 		pack := &eos.PackedTransaction{
 			Compression:       0,
@@ -383,7 +395,11 @@ func (node *BraftNode) verifySign(chain string, tx []byte, sig [][]byte, nodeID 
 			return false
 		}
 		nodePubkey, _ := node.eosWatcher.NewPublicKey(hex.EncodeToString(cluster.NodeList[nodeID].PublicKey))
-		return pubkey.String() == nodePubkey.String()
+		isEqual := pubkey.String() == nodePubkey.String()
+		if !isEqual {
+			leaderLogger.Error("pubkey not equal", "txpubkey", pubkey.String(), "nodepubkey", nodePubkey.String())
+		}
+		return isEqual
 	}
 	return false
 }

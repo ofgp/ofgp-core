@@ -711,14 +711,14 @@ func (bn *BraftNode) watchNewTx(ctx context.Context) {
 			xinIndex = viper.GetInt("DGW.xin_tran_idx")
 		}
 		nodeLogger.Debug("xinwatcher", "height", xinHeight, "index", xinIndex)
-		bn.xinWatcher.StartWatch(uint32(xinHeight), uint32(xinIndex), xinTxChan)
+		bn.xinWatcher.StartWatch(uint32(xinHeight), uint32(xinIndex), xinTxChan, 5)
 	}
 	if bn.eosWatcher != nil {
 		eosTxChan = make(chan *eoswatcher.EOSPushEvent)
 		eosHeight := viper.GetInt64("DGW.eos_height")
 		eosIndex := viper.GetInt("DGW.eos_tran_idx")
 		nodeLogger.Debug("eoswatcher", "height", eosHeight, "index", eosIndex)
-		bn.eosWatcher.StartWatch(uint32(eosHeight), uint32(eosIndex), eosTxChan)
+		bn.eosWatcher.StartWatch(uint32(eosHeight), uint32(eosIndex), eosTxChan, 5)
 	}
 
 	var watchedTx *pb.WatchedTxInfo
