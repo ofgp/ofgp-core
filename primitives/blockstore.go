@@ -774,30 +774,34 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 				return
 			}
 			// TODO sign tx
-			pack := &eos.PackedTransaction{
-				Compression:       0,
-				PackedTransaction: msg.NewlyTx.Data,
-			}
-			newlyTx, err := pack.Unpack()
+			// pack := &eos.PackedTransaction{
+			// 	Compression:       0,
+			// 	PackedTransaction: msg.NewlyTx.Data,
+			// }
+			// newlyTx, err := pack.Unpack()
+			// if err != nil {
+			// 	bsLogger.Error("unpack newly tx failed", "err", err, "sctxid", msg.WatchedTx.Txid)
+			// 	return
+			// }
+			// sig, err := bs.xinWatcher.PKMSign(newlyTx)
+			// if err != nil {
+			// 	bsLogger.Error("sign xin tx failed", "err", err, "sctxid", msg.WatchedTx.Txid)
+			// 	return
+			// }
+			// bytesSig, err := sig.MarshalJSON()
+			// if err != nil {
+			// 	bsLogger.Error("xin sig marshal to json failed", "err", err, "sctxid", msg.WatchedTx.Txid)
+			// 	return
+			// }
+			// var tmpSig [][]byte
+			// tmpSig = append(tmpSig, bytesSig)
+			signRes, err := signEOSTx(bs.xinWatcher, msg)
 			if err != nil {
-				bsLogger.Error("unpack newly tx failed", "err", err, "sctxid", msg.WatchedTx.Txid)
-				return
+				bsLogger.Error("sign xin tx err", "err", err, "sctxid", msg.WatchedTx.Txid)
 			}
-			sig, err := bs.xinWatcher.PKMSign(newlyTx)
-			if err != nil {
-				bsLogger.Error("sign xin tx failed", "err", err, "sctxid", msg.WatchedTx.Txid)
-				return
-			}
-			bytesSig, err := sig.MarshalJSON()
-			if err != nil {
-				bsLogger.Error("xin sig marshal to json failed", "err", err, "sctxid", msg.WatchedTx.Txid)
-				return
-			}
-			var tmpSig [][]byte
-			tmpSig = append(tmpSig, bytesSig)
 			SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
 			signResult, err = pb.MakeSignedResult(pb.CodeType_SIGNED, bs.localNodeId, msg.WatchedTx.Txid,
-				tmpSig, targetChain, nodeTerm, bs.signer)
+				signRes, targetChain, nodeTerm, bs.signer)
 			if err != nil {
 				bsLogger.Error("make signResult failed", "err", err, "sctxid", msg.WatchedTx.Txid)
 				return
@@ -849,18 +853,18 @@ func signEOSTx(watcher eoswatcher.EOSWatcherInterface, req *pb.SignTxRequest) (s
 	newlyTx, err := pack.Unpack()
 	if err != nil {
 		bsLogger.Error("unpack newly tx failed", "err", err, "sctxid", req.WatchedTx.Txid)
-		return
+		return nil, err
 	}
 
 	sig, err := watcher.PKMSign(newlyTx)
 	if err != nil {
 		bsLogger.Error("sign xin tx failed", "err", err, "sctxid", req.WatchedTx.Txid)
-		return nil, errors.New("sign xin tx failed")
+		return nil, err
 	}
 	bytesSig, err := sig.MarshalJSON()
 	if err != nil {
 		bsLogger.Error("xin sig marshal to json failed", "err", err, "sctxid", req.WatchedTx.Txid)
-		return nil, errors.New("xin sig marshal to json failed")
+		return nil, err
 	}
 
 	signRes = append(signRes, bytesSig)

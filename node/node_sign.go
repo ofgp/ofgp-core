@@ -127,60 +127,99 @@ func (node *BraftNode) sendEOSTxToChain(watcher eoswatcher.EOSWatcherInterface,
 	return newlyTxHash, nil
 }
 
+func (node *BraftNode) sendBtcBchTxToChain(watcher *btcwatcher.MortgageWatcher, tx []byte,
+	sigs [][][]byte, req *pb.SignTxRequest, signRes *pb.SignedResult) (newTxID string, err error) {
+	buf := bytes.NewBuffer(tx)
+	newlyTx := new(wire.MsgTx)
+	err = newlyTx.Deserialize(buf)
+	assert.ErrorIsNil(err)
+	newTxID = newlyTx.TxHash().String()
+	ok := watcher.MergeSignTx(newlyTx, sigs)
+	if !ok {
+		leaderLogger.Error("merge sign tx failed", "sctxid", signRes.TxId)
+		node.clearOnFail(req)
+		return
+	}
+	var sendedTxHash string
+	sendedTxHash, err = watcher.SendTx(newlyTx)
+	leaderLogger.Debug("sendedtx", "txid", sendedTxHash, "sctxid", signRes.TxId)
+	return
+}
+
 func (node *BraftNode) sendTxToChain(chain string, tx []byte, sigs [][][]byte, signResult *pb.SignedResult, signReq *pb.SignTxRequest) {
-	if chain == "btc" || chain == "bch" {
-		var watcher *btcwatcher.MortgageWatcher
-		buf := bytes.NewBuffer(tx)
-		newlyTx := new(wire.MsgTx)
-		err := newlyTx.Deserialize(buf)
-		assert.ErrorIsNil(err)
+	// if chain == "btc" || chain == "bch" {
+	// 	var watcher *btcwatcher.MortgageWatcher
+	// 	buf := bytes.NewBuffer(tx)
+	// 	newlyTx := new(wire.MsgTx)
+	// 	err := newlyTx.Deserialize(buf)
+	// 	assert.ErrorIsNil(err)
 
-		if chain == "bch" {
-			watcher = node.bchWatcher
-		} else {
-			watcher = node.btcWatcher
-		}
+	// 	if chain == "bch" {
+	// 		watcher = node.bchWatcher
+	// 	} else {
+	// 		watcher = node.btcWatcher
+	// 	}
 
-		newlyTxHash := newlyTx.TxHash().String()
-		ok := watcher.MergeSignTx(newlyTx, sigs)
-		if !ok {
-			leaderLogger.Error("merge sign tx failed", "sctxid", signResult.TxId)
-			node.clearOnFail(signReq)
-			return
-		}
+	// 	newlyTxHash := newlyTx.TxHash().String()
+	// 	ok := watcher.MergeSignTx(newlyTx, sigs)
+	// 	if !ok {
+	// 		leaderLogger.Error("merge sign tx failed", "sctxid", signResult.TxId)
+	// 		node.clearOnFail(signReq)
+	// 		return
+	// 	}
+	// 	start := time.Now().UnixNano()
+	// 	_, err = watcher.SendTx(newlyTx)
+	// 	end := time.Now().UnixNano()
+	// 	leaderLogger.Debug("sendBchtime", "time", (end-start)/1e6)
+	// 	if err != nil {
+	// 		leaderLogger.Error("send signed tx to bch failed", "err", err, "sctxid", signResult.TxId)
+	// 	}
+	// 	node.blockStore.SignedTxEvent.Emit(newlyTxHash, signResult.TxId, signResult.To, signReq.WatchedTx.TokenTo)
+	switch chain {
+	case "btc":
 		start := time.Now().UnixNano()
-		_, err = watcher.SendTx(newlyTx)
+		newlyTxHash, err := node.sendBtcBchTxToChain(node.btcWatcher, tx, sigs, signReq, signResult)
 		end := time.Now().UnixNano()
-		leaderLogger.Debug("sendBchtime", "time", (end-start)/1e6)
+		leaderLogger.Debug("sendbtctime", "time", (end-start)/1e6)
 		if err != nil {
-			leaderLogger.Error("send signed tx to bch failed", "err", err, "sctxid", signResult.TxId)
+			leaderLogger.Error("send signed tx to btc failed", "err", err, "sctxid", signResult.TxId)
 		}
 		node.blockStore.SignedTxEvent.Emit(newlyTxHash, signResult.TxId, signResult.To, signReq.WatchedTx.TokenTo)
-	} else if chain == "xin" {
-		var tmpSigs []*ecc.Signature
-		for _, sig := range sigs {
-			s := &ecc.Signature{}
-			s.UnmarshalJSON(sig[0])
-			tmpSigs = append(tmpSigs, s)
-		}
-		pack := &eos.PackedTransaction{
-			Compression:       0,
-			PackedTransaction: signReq.NewlyTx.Data,
-		}
-		transfer, _ := pack.Unpack()
-		newlyTx, err := node.xinWatcher.MergeSignedTx(transfer, tmpSigs...)
+	case "bch":
+		start := time.Now().UnixNano()
+		newlyTxHash, err := node.sendBtcBchTxToChain(node.bchWatcher, tx, sigs, signReq, signResult)
+		end := time.Now().UnixNano()
+		leaderLogger.Debug("sendbchtime", "time", (end-start)/1e6)
 		if err != nil {
-			leaderLogger.Error("merge sign tx failed", "sctxid", signResult.TxId)
-			node.clearOnFail(signReq)
-			return
+			leaderLogger.Error("send signed tx to btc failed", "err", err, "sctxid", signResult.TxId)
 		}
-		_, err = node.xinWatcher.SendTx(newlyTx)
-		if err != nil {
-			leaderLogger.Error("send signed tx to xin failed", "err", err, "sctxid", signResult.TxId)
-		}
-		newlyTxHash := hex.EncodeToString(newlyTx.ID())
 		node.blockStore.SignedTxEvent.Emit(newlyTxHash, signResult.TxId, signResult.To, signReq.WatchedTx.TokenTo)
-	} else if chain == "eos" {
+	case "xin":
+		// var tmpSigs []*ecc.Signature
+		// for _, sig := range sigs {
+		// 	s := &ecc.Signature{}
+		// 	s.UnmarshalJSON(sig[0])
+		// 	tmpSigs = append(tmpSigs, s)
+		// }
+		// pack := &eos.PackedTransaction{
+		// 	Compression:       0,
+		// 	PackedTransaction: signReq.NewlyTx.Data,
+		// }
+		// transfer, _ := pack.Unpack()
+		// newlyTx, err := node.xinWatcher.MergeSignedTx(transfer, tmpSigs...)
+		// if err != nil {
+		// 	leaderLogger.Error("merge sign tx failed", "sctxid", signResult.TxId)
+		// 	node.clearOnFail(signReq)
+		// 	return
+		// }
+		// _, err = node.xinWatcher.SendTx(newlyTx)
+		// if err != nil {
+		// 	leaderLogger.Error("send signed tx to xin failed", "err", err, "sctxid", signResult.TxId)
+		// }
+		// newlyTxHash := hex.EncodeToString(newlyTx.ID())
+		newlyTxHash, _ := node.sendEOSTxToChain(node.xinWatcher, sigs, signReq, signResult)
+		node.blockStore.SignedTxEvent.Emit(newlyTxHash, signResult.TxId, signResult.To, signReq.WatchedTx.TokenTo)
+	case "eos":
 		newlyTxHash, _ := node.sendEOSTxToChain(node.eosWatcher, sigs, signReq, signResult)
 		node.blockStore.SignedTxEvent.Emit(newlyTxHash, signResult.TxId, signResult.To, signReq.WatchedTx.TokenTo)
 	}
