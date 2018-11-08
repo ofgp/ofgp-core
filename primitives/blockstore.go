@@ -1388,8 +1388,8 @@ func (bs *BlockStore) validateXINSignTx(req *pb.SignTxRequest) int {
 }
 
 // getEOSAmountFromXin xin币跟美元比例为 1:1000
-func getEOSAmountFromXin(xinAmount int64, price float32, cointUint int64) int64 {
-	amount := (float64(xinAmount) * float64(cointUint)) / (1000.0 * float64(price))
+func getEOSAmountFromXin(xinAmount int64, price float32, cointUint float64) int64 {
+	amount := (float64(xinAmount) * cointUint) / (1000.0 * float64(price))
 	return int64(amount)
 }
 
@@ -1424,10 +1424,10 @@ func (bs *BlockStore) validateEOSSignTx(req *pb.SignTxRequest) int {
 	}
 
 	var symbol string
-	var coinUnit int64
+	var coinUnit float64
 	if req.WatchedTx.From == "xin" {
 		symbol = "EOS-USD"
-		coinUnit = 10000
+		coinUnit = 10000.0
 	} else {
 		return wrongInputOutput
 	}

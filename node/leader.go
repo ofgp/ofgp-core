@@ -624,18 +624,18 @@ func (ld *Leader) createXINTx(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 }
 
 // getEOSAmountFromXin xin币跟美元比例为 1:1000
-func getEOSAmountFromXin(xinAmount int64, price float32, cointUint int64) int64 {
-	amount := (float64(xinAmount) * float64(cointUint)) / (1000.0 * float64(price))
+func getEOSAmountFromXin(xinAmount int64, price float32, cointUint float64) int64 {
+	amount := (float64(xinAmount) * cointUint) / (1000.0 * float64(price))
 	return int64(amount)
 }
 
 // createEOSTx create eos transaction
 func (ld *Leader) createEOSTx(watchedTx *pb.WatchedTxInfo, account string) *pb.NewlyTx {
 	var symbol string
-	var coinUnit int64
+	var coinUnit float64
 	if watchedTx.From == "xin" {
 		symbol = "EOS-USD"
-		coinUnit = 10000
+		coinUnit = 10000.0
 	} else {
 		leaderLogger.Error("create xin tx failed", "from", watchedTx.From)
 		return nil
@@ -653,8 +653,8 @@ func (ld *Leader) createEOSTx(watchedTx *pb.WatchedTxInfo, account string) *pb.N
 	amount := getEOSAmountFromXin(watchedTx.RechargeList[0].Amount, priceInfo.Price, coinUnit)
 
 	receiver := watchedTx.RechargeList[0].Address
-	leaderLogger.Debug("create eos action praram", "from", account, "to", receiver, "amount", int64(amount), "sctxid", watchedTx.GetTxid())
-	action, _ := ld.eosWatcher.CreateTransferAction(account, receiver, int64(amount), watchedTx.GetTxid())
+	leaderLogger.Debug("create eos action praram", "from", account, "to", receiver, "amount", amount, "sctxid", watchedTx.GetTxid())
+	action, _ := ld.eosWatcher.CreateTransferAction(account, receiver, amount, watchedTx.GetTxid())
 
 	transfer, err := ld.eosWatcher.CreateTx(action, 10*time.Minute)
 
