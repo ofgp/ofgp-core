@@ -1016,6 +1016,10 @@ func EOSToPbTx(event *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 		log.Printf("unmarshal memo err:%v,data:%s\n", err, event.GetData())
 		return nil
 	}
+	if memo.Chain != "xin" {
+		log.Printf("eos chain type err chain:%s\n", memo.Chain)
+		return nil
+	}
 	if !checkEOSAddr(memo.Address) {
 		log.Printf("eosEvent addr wrong addr:%s", memo.Address)
 		return nil
