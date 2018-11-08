@@ -687,7 +687,7 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 				signResult, err = pb.MakeSignedResult(pb.CodeType_REJECT, bs.localNodeId,
 					msg.WatchedTx.Txid, nil, targetChain, nodeTerm, bs.signer)
 				if err != nil {
-					bsLogger.Error("validatesign make signedResult err", "err", err)
+					bsLogger.Error("validate sign make signedResult err", "err", err)
 					return
 				}
 				tasks.Add(func() { bs.SignHandledEvent.Emit(signResult) })
