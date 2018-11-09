@@ -62,6 +62,7 @@ type Leader struct {
 	btcWatcher *btcwatcher.MortgageWatcher
 	ethWatcher *ew.Client
 	xinWatcher *eoswatcher.EOSWatcher //xin chain is based on eos chain
+	eosWatcher *eoswatcher.EOSWatcherMain
 	priceTool  *price.PriceTool
 	pm         *cluster.PeerManager
 	sync.Mutex
@@ -70,7 +71,7 @@ type Leader struct {
 // NewLeader 新生成一个leader对象，并启动后台任务，循环检查选举相关任务（创建块，投票等）
 func NewLeader(nodeInfo cluster.NodeInfo, bs *primitives.BlockStore, ts *primitives.TxStore,
 	signer *crypto.SecureSigner, btcWatcher *btcwatcher.MortgageWatcher, bchWatcher *btcwatcher.MortgageWatcher,
-	ethWatcher *ew.Client, xinWatcher *eoswatcher.EOSWatcher, tool *price.PriceTool, pm *cluster.PeerManager) *Leader {
+	ethWatcher *ew.Client, xinWatcher *eoswatcher.EOSWatcher, eosWatcher *eoswatcher.EOSWatcherMain, tool *price.PriceTool, pm *cluster.PeerManager) *Leader {
 	leader := &Leader{
 		BecomeLeaderEvent: util.NewEvent(),
 		NewInitEvent:      util.NewEvent(),
@@ -98,6 +99,7 @@ func NewLeader(nodeInfo cluster.NodeInfo, bs *primitives.BlockStore, ts *primiti
 		btcWatcher: btcWatcher,
 		ethWatcher: ethWatcher,
 		xinWatcher: xinWatcher,
+		eosWatcher: eosWatcher,
 		priceTool:  tool,
 		pm:         pm,
 	}
@@ -441,6 +443,9 @@ func (ld *Leader) createTransaction(ctx context.Context) {
 						newlyTx = ld.createBtcTx(tx.Tx, "btc")
 					} else if tx.Tx.To == "xin" {
 						newlyTx = ld.createXINTx(tx.Tx)
+					} else if tx.Tx.To == "eos" {
+						account := viper.GetString("DGW.eos_dgateway_account")
+						newlyTx = ld.createEOSTx(tx.Tx, account)
 					} else {
 						leaderLogger.Error("watched tx wrong type", "type", tx.Tx.To)
 						continue
@@ -570,10 +575,16 @@ func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 // 暂时没有收取手续费
 func (ld *Leader) createXINTx(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 	var symbol string
+	var coinUnit float64
 	if watchedTx.From == "bch" {
 		symbol = "BCH-USD"
+		coinUnit = 100000000.0
 	} else if watchedTx.From == "btc" {
 		symbol = "BTC-USD"
+		coinUnit = 100000000.0
+	} else if watchedTx.From == "eos" {
+		symbol = "EOS-USD"
+		coinUnit = 10000.0
 	} else {
 		leaderLogger.Error("create xin tx failed", "from", watchedTx.From)
 		return nil
@@ -587,8 +598,12 @@ func (ld *Leader) createXINTx(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 		leaderLogger.Error("get price failed", "err", priceInfo.Err, "sctxid", watchedTx.Txid)
 		return nil
 	}
+	if len(watchedTx.RechargeList) == 0 {
+		leaderLogger.Error("recharge list nil", "sctxid", watchedTx.Txid)
+		return nil
+	}
 	// 目标token对标USD的比例是1000:1。
-	amount := float64(watchedTx.RechargeList[0].Amount) * float64(priceInfo.Price) / 100000.0
+	amount := float64(watchedTx.RechargeList[0].Amount) * float64(priceInfo.Price) * 1000 / coinUnit
 	action, err := ld.xinWatcher.XinPlayerCreateTokenAction(viper.GetString("DGW.xin_contract_account"), viper.GetString("DGW.xin_transfer_account"),
 		watchedTx.RechargeList[0].Address, uint32(amount))
 	if err != nil {
@@ -603,6 +618,53 @@ func (ld *Leader) createXINTx(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 	pack, err := transfer.Pack(0)
 	if err != nil {
 		leaderLogger.Error("pack xin tx failed", "err", err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	return &pb.NewlyTx{Data: pack.PackedTransaction, Timestamp: priceInfo.Timestamp}
+}
+
+// getEOSAmountFromXin xin币跟美元比例为 1:1000
+func getEOSAmountFromXin(xinAmount int64, price float32, cointUint float64) int64 {
+	amount := (float64(xinAmount) * cointUint) / (1000.0 * float64(price))
+	return int64(amount)
+}
+
+// createEOSTx create eos transaction
+func (ld *Leader) createEOSTx(watchedTx *pb.WatchedTxInfo, account string) *pb.NewlyTx {
+	var symbol string
+	var coinUnit float64
+	if watchedTx.From == "xin" {
+		symbol = "EOS-USD"
+		coinUnit = 10000.0
+	} else {
+		leaderLogger.Error("create xin tx failed", "from", watchedTx.From)
+		return nil
+	}
+	priceInfo, err := ld.priceTool.GetCurrPrice(symbol)
+	if err != nil {
+		leaderLogger.Error("get price failed", "err", err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	if len(priceInfo.Err) > 0 {
+		leaderLogger.Error("get price failed", "err", priceInfo.Err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	// 目标token对标USD的比例是1000:1。
+	amount := getEOSAmountFromXin(watchedTx.RechargeList[0].Amount, priceInfo.Price, coinUnit)
+
+	receiver := watchedTx.RechargeList[0].Address
+	leaderLogger.Debug("create eos action praram", "from", account, "to", receiver, "amount", amount, "sctxid", watchedTx.GetTxid())
+	action, _ := ld.eosWatcher.CreateTransferAction(account, receiver, amount, watchedTx.GetTxid())
+
+	transfer, err := ld.eosWatcher.CreateTx(action, 10*time.Minute)
+
+	if err != nil {
+		leaderLogger.Error("create eos transfer tx failed", "err", err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	pack, err := transfer.Pack(0)
+	if err != nil {
+		leaderLogger.Error("pack eos tx failed", "err", err, "sctxid", watchedTx.Txid)
 		return nil
 	}
 	return &pb.NewlyTx{Data: pack.PackedTransaction, Timestamp: priceInfo.Timestamp}

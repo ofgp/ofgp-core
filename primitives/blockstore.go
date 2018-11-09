@@ -14,6 +14,7 @@ import (
 
 	"github.com/btcsuite/btcd/wire"
 	"github.com/eoscanada/eos-go"
+	"github.com/eoscanada/eos-go/token"
 	btcfunc "github.com/ofgp/bitcoinWatcher/coinmanager"
 	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
 	ew "github.com/ofgp/ethwatcher"
@@ -54,6 +55,7 @@ type BlockStore struct {
 	btcWatcher   *btcwatcher.MortgageWatcher
 	ethWatcher   *ew.Client
 	xinWatcher   *eoswatcher.EOSWatcher
+	eosWatcher   *eoswatcher.EOSWatcherMain
 	priceTool    *price.PriceTool
 	signedTxMap  map[string]string
 	localNodeId  int32
@@ -86,7 +88,7 @@ type BlockStore struct {
 // NewBlockStore 生成一个BlockStore对象
 func NewBlockStore(db *dgwdb.LDBDatabase, ts *TxStore, btcWatcher *btcwatcher.MortgageWatcher,
 	bchWatcher *btcwatcher.MortgageWatcher, ethWatcher *ew.Client, xinWatcher *eoswatcher.EOSWatcher,
-	tool *price.PriceTool, signer *crypto.SecureSigner, localNodeId int32) *BlockStore {
+	eosWatcher *eoswatcher.EOSWatcherMain, tool *price.PriceTool, signer *crypto.SecureSigner, localNodeId int32) *BlockStore {
 	return &BlockStore{
 		db:           db,
 		ts:           ts,
@@ -95,6 +97,7 @@ func NewBlockStore(db *dgwdb.LDBDatabase, ts *TxStore, btcWatcher *btcwatcher.Mo
 		btcWatcher:   btcWatcher,
 		ethWatcher:   ethWatcher,
 		xinWatcher:   xinWatcher,
+		eosWatcher:   eosWatcher,
 		priceTool:    tool,
 		signedTxMap:  make(map[string]string),
 		localNodeId:  localNodeId,
@@ -420,6 +423,7 @@ func (bs *BlockStore) HandleSignTx(req *pb.SignTxRequest) {
 	end := time.Now().UnixNano()
 	bsLogger.Debug("hanleSignTime", "time", (end-start)/1e6)
 	deferredEvents.ExecAll()
+	bsLogger.Debug("sign tx end", "sctxid", req.WatchedTx.Txid)
 }
 
 func (bs *BlockStore) updateNodeTermWithInit(tasks *task.Queue, init *pb.InitMsg) bool {
@@ -463,7 +467,7 @@ func (bs *BlockStore) handleInitMsg(tasks *task.Queue, init *pb.InitMsg) {
 		newFresh := pb.NewBlockPack(init)
 		bsLogger.Debug("in handle init msg, begin validate txs")
 		allTxValid := bs.validateTxs(newFresh)
-		bsLogger.Debug("in handle init msg, validate txs done")
+		bsLogger.Debug("in handle init msg, validate txs done", "validres", allTxValid)
 
 		reconfigValid := bs.checkReconfigBlock(newFresh)
 
@@ -665,11 +669,8 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 			} else {
 				watcher = bs.btcWatcher
 			}
-			buf := bytes.NewBuffer(msg.NewlyTx.Data)
-			newlyTx := new(wire.MsgTx)
-			newlyTx.Deserialize(buf)
 
-			validateResult := bs.validateBtcSignTx(msg, newlyTx)
+			validateResult := bs.validateBtcSignTx(msg)
 			if validateResult != validatePass {
 				if validateResult == wrongInputOutput {
 					bsLogger.Error("validate sign tx failed", "sctxid", msg.WatchedTx.Txid)
@@ -683,18 +684,14 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 				signResult, err = pb.MakeSignedResult(pb.CodeType_REJECT, bs.localNodeId,
 					msg.WatchedTx.Txid, nil, targetChain, nodeTerm, bs.signer)
 				if err != nil {
-					bsLogger.Error("validatesign make signedResult err", "err", err)
+					bsLogger.Error("validate sign make signedResult err", "err", err)
 					return
 				}
 				tasks.Add(func() { bs.SignHandledEvent.Emit(signResult) })
 				return
 			}
 
-			newlyTxId := newlyTx.TxHash().String()
-			signStart := time.Now().UnixNano()
-			sig, ok := watcher.SignTx(newlyTx, bs.signer.PubkeyHash)
-			signEnd := time.Now().UnixNano()
-			bsLogger.Debug("signtime", "scTxID", msg.WatchedTx.Txid, "time", (signEnd-signStart)/1e6)
+			sig, newlyTxid, ok := signBtcBchtx(watcher, msg, bs.signer.PubkeyHash)
 			if ok != 0 {
 				bsLogger.Error("sign tx failed", "code", ok, "sctxid", msg.WatchedTx.Txid)
 				SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
@@ -707,7 +704,7 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 				tasks.Add(func() { bs.SignHandledEvent.Emit(signResult) })
 				return
 			}
-			bsLogger.Debug("sign bch tx done", "sctxid", msg.WatchedTx.Txid, "newlyTxid", newlyTxId)
+			bsLogger.Debug("sign bch tx done", "sctxid", msg.WatchedTx.Txid, "newlyTxid", newlyTxid)
 			SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
 			signResult, err := pb.MakeSignedResult(pb.CodeType_SIGNED, bs.localNodeId,
 				msg.WatchedTx.Txid, sig, targetChain, nodeTerm, bs.signer)
@@ -769,31 +766,46 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 				tasks.Add(func() { bs.SignHandledEvent.Emit(signResult) })
 				return
 			}
-			// TODO sign tx
-			pack := &eos.PackedTransaction{
-				Compression:       0,
-				PackedTransaction: msg.NewlyTx.Data,
-			}
-			newlyTx, err := pack.Unpack()
+
+			signRes, err := signEOSTx(bs.xinWatcher, msg)
 			if err != nil {
-				bsLogger.Error("unpack newly tx failed", "err", err, "sctxid", msg.WatchedTx.Txid)
-				return
+				bsLogger.Error("sign xin tx err", "err", err, "sctxid", msg.WatchedTx.Txid)
 			}
-			sig, err := bs.xinWatcher.PKMSign(newlyTx)
-			if err != nil {
-				bsLogger.Error("sign xin tx failed", "err", err, "sctxid", msg.WatchedTx.Txid)
-				return
-			}
-			bytesSig, err := sig.MarshalJSON()
-			if err != nil {
-				bsLogger.Error("xin sig marshal to json failed", "err", err, "sctxid", msg.WatchedTx.Txid)
-				return
-			}
-			var tmpSig [][]byte
-			tmpSig = append(tmpSig, bytesSig)
 			SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
 			signResult, err = pb.MakeSignedResult(pb.CodeType_SIGNED, bs.localNodeId, msg.WatchedTx.Txid,
-				tmpSig, targetChain, nodeTerm, bs.signer)
+				signRes, targetChain, nodeTerm, bs.signer)
+			if err != nil {
+				bsLogger.Error("make signResult failed", "err", err, "sctxid", msg.WatchedTx.Txid)
+				return
+			}
+			tasks.Add(func() { bs.SignHandledEvent.Emit(signResult) })
+		} else if targetChain == "eos" {
+			validateResult := bs.validateEOSSignTx(msg)
+			if validateResult != validatePass {
+				SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
+				if validateResult == wrongInputOutput {
+					bsLogger.Error("validate sgin tx failed", "sctxid", msg.WatchedTx.Txid)
+					tasks.Add(func() { bs.NewWeakAccuseEvent.Emit(msg.Term) })
+				} else {
+					bsLogger.Debug("tx already signed", "sctxid", msg.WatchedTx.Txid)
+				}
+				signResult, err = pb.MakeSignedResult(pb.CodeType_REJECT, bs.localNodeId, msg.WatchedTx.Txid,
+					nil, targetChain, nodeTerm, bs.signer)
+				if err != nil {
+					bsLogger.Error("make signResult failed", "err", err)
+					return
+				}
+				tasks.Add(func() { bs.SignHandledEvent.Emit(signResult) })
+				return
+			}
+			signRes, err := signEOSTx(bs.eosWatcher, msg)
+			if err != nil {
+				bsLogger.Error("sign tx err", "err", err, "sctxid", msg.WatchedTx.Txid)
+				return
+			}
+			SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
+			signResult, err = pb.MakeSignedResult(pb.CodeType_SIGNED, bs.localNodeId, msg.WatchedTx.Txid,
+				signRes, targetChain, nodeTerm, bs.signer)
 			if err != nil {
 				bsLogger.Error("make signResult failed", "err", err, "sctxid", msg.WatchedTx.Txid)
 				return
@@ -801,6 +813,46 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 			tasks.Add(func() { bs.SignHandledEvent.Emit(signResult) })
 		}
 	}
+}
+
+func signBtcBchtx(watcher *btcwatcher.MortgageWatcher, req *pb.SignTxRequest, pubkeyHash string) (signres [][]byte, newTxhash string, status int) {
+	buf := bytes.NewBuffer(req.NewlyTx.Data)
+	newlyTx := new(wire.MsgTx)
+	newlyTx.Deserialize(buf)
+	newTxhash = newlyTx.TxHash().String()
+	signStart := time.Now().UnixNano()
+	signres, status = watcher.SignTx(newlyTx, pubkeyHash)
+	signEnd := time.Now().UnixNano()
+	bsLogger.Debug("signtime", "scTxID", req.WatchedTx.Txid, "time", (signEnd-signStart)/1e6)
+	return
+}
+
+// 获取eos签名参数
+func signEOSTx(watcher eoswatcher.EOSWatcherInterface, req *pb.SignTxRequest) (signRes [][]byte, err error) {
+
+	pack := &eos.PackedTransaction{
+		Compression:       0,
+		PackedTransaction: req.NewlyTx.Data,
+	}
+	newlyTx, err := pack.Unpack()
+	if err != nil {
+		bsLogger.Error("unpack newly tx failed", "err", err, "sctxid", req.WatchedTx.Txid)
+		return nil, err
+	}
+
+	sig, err := watcher.PKMSign(newlyTx)
+	if err != nil {
+		bsLogger.Error("sign xin tx failed", "err", err, "sctxid", req.WatchedTx.Txid)
+		return nil, err
+	}
+	bytesSig, err := sig.MarshalJSON()
+	if err != nil {
+		bsLogger.Error("xin sig marshal to json failed", "err", err, "sctxid", req.WatchedTx.Txid)
+		return nil, err
+	}
+
+	signRes = append(signRes, bytesSig)
+	return signRes, nil
 }
 
 func (bs *BlockStore) isETHTxOnChain(txHash string) bool {
@@ -1085,6 +1137,15 @@ func (bs *BlockStore) validateTxs(blockPack *pb.BlockPack) int {
 				} else if tx.WatchedTx.To == "xin" {
 					ev, _ := bs.xinWatcher.GetEventByTxid(tx.NewlyTxId)
 					if ev == nil {
+						bsLogger.Error("validate xin tx onchain fail", "sctxid", tx.WatchedTx.Txid)
+						resultChan <- Invalid
+					} else {
+						resultChan <- Valid
+					}
+				} else if tx.WatchedTx.To == "eos" {
+					ev, _ := bs.eosWatcher.GetEventByTxid(tx.NewlyTxId)
+					if ev == nil {
+						bsLogger.Error("validate eos tx onchain fail", "sctxid", tx.WatchedTx.Txid)
 						resultChan <- Invalid
 					} else {
 						resultChan <- Valid
@@ -1119,7 +1180,11 @@ func (bs *BlockStore) validateETHTx(txInfo *ew.PushEvent, scTxInfo *pb.WatchedTx
 	return mintData.Proposal == scTxInfo.Txid && mintData.Wad == uint64(scTxInfo.RechargeList[0].Amount)
 }
 
-func (bs *BlockStore) validateBtcSignTx(req *pb.SignTxRequest, newlyTx *wire.MsgTx) int {
+func (bs *BlockStore) validateBtcSignTx(req *pb.SignTxRequest) int {
+	buf := bytes.NewBuffer(req.NewlyTx.Data)
+	newlyTx := new(wire.MsgTx)
+	newlyTx.Deserialize(buf)
+
 	if req.WatchedTx.IsTransferTx() {
 		return bs.validateTransferSignTx(req, newlyTx)
 	}
@@ -1254,6 +1319,7 @@ func (bs *BlockStore) validateEthSignTx(req *pb.SignTxRequest) int {
 func (bs *BlockStore) validateXINSignTx(req *pb.SignTxRequest) int {
 	baseCheckResult := bs.baseCheck(req)
 	if baseCheckResult != validatePass {
+		bsLogger.Error("base check err", "checkRes", baseCheckResult, "sctxid", req.WatchedTx.Txid)
 		return baseCheckResult
 	}
 
@@ -1280,10 +1346,80 @@ func (bs *BlockStore) validateXINSignTx(req *pb.SignTxRequest) int {
 	}
 
 	var symbol string
+	var coinUnit float64
 	if req.WatchedTx.From == "bch" {
 		symbol = "BCH-USD"
+		coinUnit = 100000000.0
 	} else if req.WatchedTx.From == "btc" {
 		symbol = "BTC-USD"
+		coinUnit = 100000000.0
+	} else if req.WatchedTx.From == "eos" {
+		symbol = "EOS-USD"
+		coinUnit = 10000.0
+	} else {
+		bsLogger.Error("From type err", "formtype", req.WatchedTx.From, "sctxid", req.WatchedTx.Txid)
+		return wrongInputOutput
+	}
+	priceInfo, err := bs.priceTool.GetPriceByTimestamp(symbol, ts)
+	if err != nil {
+		bsLogger.Error("get price info failed", "err", err, "sctxid", req.WatchedTx.Txid)
+		return wrongInputOutput
+	}
+	if len(priceInfo.Err) > 0 {
+		bsLogger.Error("get price info failed", "err", priceInfo.Err, "sctxid", req.WatchedTx.Txid)
+		return wrongInputOutput
+	}
+	amount := float64(req.WatchedTx.RechargeList[0].Amount) * float64(priceInfo.Price) * 1000 / coinUnit
+
+	actionData := newlyTx.Actions[0].Data.(*eoswatcher.CreateToken)
+	if string(actionData.User) == req.WatchedTx.RechargeList[0].Address && actionData.Amount == uint32(amount) {
+		return validatePass
+	}
+	bsLogger.Error("validate xin tx failed", "actuser", actionData.User, "addr", req.WatchedTx.RechargeList[0].Address, "actamount", actionData.Amount, "amount", amount)
+	return wrongInputOutput
+}
+
+// getEOSAmountFromXin xin币跟美元比例为 1:1000
+func getEOSAmountFromXin(xinAmount int64, price float32, cointUint float64) int64 {
+	amount := (float64(xinAmount) * cointUint) / (1000.0 * float64(price))
+	return int64(amount)
+}
+
+// validateEOSSignTx 验证eos tx
+func (bs *BlockStore) validateEOSSignTx(req *pb.SignTxRequest) int {
+	baseCheckResult := bs.baseCheck(req)
+	if baseCheckResult != validatePass {
+		bsLogger.Error("base check tx err", "status", baseCheckResult, "sctxid", req.WatchedTx.Txid)
+		return baseCheckResult
+	}
+
+	pack := &eos.PackedTransaction{
+		Compression:       0,
+		PackedTransaction: req.NewlyTx.Data,
+	}
+	newlyTx, err := pack.Unpack()
+	if err != nil {
+		bsLogger.Error("unpack newly tx failed", "err", err, "sctxid", req.WatchedTx.Txid)
+		return wrongInputOutput
+	}
+	if len(newlyTx.Actions) != 1 {
+		bsLogger.Error("newly tx action is not equals 1", "sctxid", req.WatchedTx.Txid)
+		return wrongInputOutput
+	}
+
+	local, _ := time.LoadLocation("UTC")
+	ts := req.NewlyTx.Timestamp
+	currTs := time.Now().In(local).Unix()
+	if currTs-ts > coinPriceExpire {
+		bsLogger.Error("price timestamp is out of date", "curr", currTs, "reqts", ts, "sctxid", req.WatchedTx.Txid)
+		return wrongInputOutput
+	}
+
+	var symbol string
+	var coinUnit float64
+	if req.WatchedTx.From == "xin" {
+		symbol = "EOS-USD"
+		coinUnit = 10000.0
 	} else {
 		return wrongInputOutput
 	}
@@ -1296,13 +1432,16 @@ func (bs *BlockStore) validateXINSignTx(req *pb.SignTxRequest) int {
 		bsLogger.Error("get price info failed", "err", priceInfo.Err, "sctxid", req.WatchedTx.Txid)
 		return wrongInputOutput
 	}
-	amount := float64(req.WatchedTx.RechargeList[0].Amount) * float64(priceInfo.Price) / 100000.0
+	amount := getEOSAmountFromXin(req.WatchedTx.RechargeList[0].Amount, float32(priceInfo.Price), coinUnit)
 
-	actionData := newlyTx.Actions[0].Data.(*eoswatcher.CreateToken)
-	if string(actionData.User) == req.WatchedTx.RechargeList[0].Address && actionData.Amount == uint32(amount) {
+	transer := newlyTx.Actions[0].Data.(*token.Transfer)
+
+	if string(transer.To) == req.WatchedTx.RechargeList[0].Address && transer.Quantity.Amount == int64(amount) {
+		bsLogger.Error("eos tx action param not equal", "actionUser", string(transer.To), "reqUser",
+			req.WatchedTx.RechargeList[0].Address, "actionAmount", transer.Quantity.Amount, "reqAmount", int64(amount))
 		return validatePass
 	}
-	bsLogger.Error("validate xin tx failed", "actuser", actionData.User, "addr", req.WatchedTx.RechargeList[0].Address, "actamount", actionData.Amount, "amount", amount)
+	bsLogger.Error("validate xin tx failed", "actuser", string(transer.To), "addr", req.WatchedTx.RechargeList[0].Address, "actamount", transer.Quantity.Amount, "amount", amount)
 	return wrongInputOutput
 }
 
@@ -1363,6 +1502,12 @@ func (bs *BlockStore) validateWatchedTx(tx *pb.WatchedTxInfo) bool {
 				return false
 			}
 			newTx = pb.XINToPbTx(chainTx)
+		} else if tx.From == "eos" {
+			chainTx, err := bs.eosWatcher.GetEventByTxid(tx.Txid)
+			if err != nil {
+				return false
+			}
+			newTx = pb.EOSToPbTx(chainTx)
 		} else {
 			return false
 		}

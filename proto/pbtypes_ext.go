@@ -5,6 +5,7 @@ import (
 	"eosc/eoswatcher"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
@@ -961,15 +962,24 @@ func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 		log.Printf("unmarshal memo err:%v,data:%s\n", err, tx.GetData())
 		return nil
 	}
-	if memo.Chain != "btc" && memo.Chain != "bch" {
+	if memo.Chain != "btc" && memo.Chain != "bch" && memo.Chain != "eos" {
 		log.Printf("xin chain type err chain:%s\n", memo.Chain)
 		return nil
 	}
-	_, err = coinmanager.DecodeAddress(memo.Address, memo.Chain)
-	if err != nil {
-		log.Printf("xin decode adrr err:%v,addr:%s,chain:%s\n", err, memo.Address, memo.Chain)
-		return nil
+	if memo.Chain == "btc" || memo.Chain == "bch" {
+		_, err = coinmanager.DecodeAddress(memo.Address, memo.Chain)
+		if err != nil {
+			log.Printf("xin decode adrr err:%v,addr:%s,chain:%s\n", err, memo.Address, memo.Chain)
+			return nil
+		}
 	}
+	if memo.Chain == "eos" {
+		if !checkEOSAddr(memo.Address) {
+			log.Printf("eosEvent addr wrong addr:%s", memo.Address)
+			return nil
+		}
+	}
+
 	watchedTx := &WatchedTxInfo{
 		Txid:      tx.GetTxID(),
 		Amount:    int64(tx.GetAmount()),
@@ -981,6 +991,50 @@ func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 	}
 	watchedTx.RechargeList = append(watchedTx.RechargeList, &AddressInfo{
 		Amount:  int64(tx.GetAmount()),
+		Address: memo.Address,
+	})
+	return watchedTx
+}
+
+func checkEOSAddr(addr string) bool {
+	reg := regexp.MustCompile(`^[a-z1-5.]{1,12}$`)
+	if reg.MatchString(addr) {
+		return true
+	}
+	return false
+}
+
+// EOSToPbTx eosEvent->watchedInfo
+func EOSToPbTx(event *eoswatcher.EOSPushEvent) *WatchedTxInfo {
+	if event.GetAmount() <= 0 {
+		log.Printf("eos to pbtx amount<=0 amount:%d\n", event.GetAmount())
+		return nil
+	}
+	memo := &eosMemo{}
+	err := json.Unmarshal(event.GetData(), memo)
+	if err != nil {
+		log.Printf("unmarshal memo err:%v,data:%s\n", err, event.GetData())
+		return nil
+	}
+	if memo.Chain != "xin" {
+		log.Printf("eos chain type err chain:%s\n", memo.Chain)
+		return nil
+	}
+	if !checkEOSAddr(memo.Address) {
+		log.Printf("eosEvent addr wrong addr:%s", memo.Address)
+		return nil
+	}
+	watchedTx := &WatchedTxInfo{
+		Txid:      event.GetTxID(),
+		Amount:    int64(event.GetAmount()),
+		From:      "eos",
+		To:        memo.Chain,
+		TokenFrom: 1,
+		TokenTo:   0,
+		Fee:       0,
+	}
+	watchedTx.RechargeList = append(watchedTx.RechargeList, &AddressInfo{
+		Amount:  int64(event.GetAmount()),
 		Address: memo.Address,
 	})
 	return watchedTx
