@@ -575,16 +575,16 @@ func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 // 暂时没有收取手续费
 func (ld *Leader) createXINTx(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 	var symbol string
-	var coinUnit int64
+	var coinUnit float64
 	if watchedTx.From == "bch" {
 		symbol = "BCH-USD"
-		coinUnit = 100000000
+		coinUnit = 100000000.0
 	} else if watchedTx.From == "btc" {
 		symbol = "BTC-USD"
-		coinUnit = 100000000
+		coinUnit = 100000000.0
 	} else if watchedTx.From == "eos" {
 		symbol = "EOS-USD"
-		coinUnit = 10000
+		coinUnit = 10000.0
 	} else {
 		leaderLogger.Error("create xin tx failed", "from", watchedTx.From)
 		return nil
@@ -603,7 +603,7 @@ func (ld *Leader) createXINTx(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 		return nil
 	}
 	// 目标token对标USD的比例是1000:1。
-	amount := float64(watchedTx.RechargeList[0].Amount) * float64(priceInfo.Price) * 1000 / float64(coinUnit)
+	amount := float64(watchedTx.RechargeList[0].Amount) * float64(priceInfo.Price) * 1000 / coinUnit
 	action, err := ld.xinWatcher.XinPlayerCreateTokenAction(viper.GetString("DGW.xin_contract_account"), viper.GetString("DGW.xin_transfer_account"),
 		watchedTx.RechargeList[0].Address, uint32(amount))
 	if err != nil {
