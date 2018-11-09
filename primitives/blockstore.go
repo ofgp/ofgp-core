@@ -691,14 +691,6 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 				return
 			}
 
-			// buf := bytes.NewBuffer(msg.NewlyTx.Data)
-			// newlyTx := new(wire.MsgTx)
-			// newlyTx.Deserialize(buf)
-			// newlyTxid := newlyTx.TxHash().String()
-			// signStart := time.Now().UnixNano()
-			// sig, ok := watcher.SignTx(newlyTx, bs.signer.PubkeyHash)
-			// signEnd := time.Now().UnixNano()
-			// bsLogger.Debug("signtime", "scTxID", msg.WatchedTx.Txid, "time", (signEnd-signStart)/1e6)
 			sig, newlyTxid, ok := signBtcBchtx(watcher, msg, bs.signer.PubkeyHash)
 			if ok != 0 {
 				bsLogger.Error("sign tx failed", "code", ok, "sctxid", msg.WatchedTx.Txid)
@@ -774,28 +766,7 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 				tasks.Add(func() { bs.SignHandledEvent.Emit(signResult) })
 				return
 			}
-			// TODO sign tx
-			// pack := &eos.PackedTransaction{
-			// 	Compression:       0,
-			// 	PackedTransaction: msg.NewlyTx.Data,
-			// }
-			// newlyTx, err := pack.Unpack()
-			// if err != nil {
-			// 	bsLogger.Error("unpack newly tx failed", "err", err, "sctxid", msg.WatchedTx.Txid)
-			// 	return
-			// }
-			// sig, err := bs.xinWatcher.PKMSign(newlyTx)
-			// if err != nil {
-			// 	bsLogger.Error("sign xin tx failed", "err", err, "sctxid", msg.WatchedTx.Txid)
-			// 	return
-			// }
-			// bytesSig, err := sig.MarshalJSON()
-			// if err != nil {
-			// 	bsLogger.Error("xin sig marshal to json failed", "err", err, "sctxid", msg.WatchedTx.Txid)
-			// 	return
-			// }
-			// var tmpSig [][]byte
-			// tmpSig = append(tmpSig, bytesSig)
+
 			signRes, err := signEOSTx(bs.xinWatcher, msg)
 			if err != nil {
 				bsLogger.Error("sign xin tx err", "err", err, "sctxid", msg.WatchedTx.Txid)
