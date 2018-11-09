@@ -669,11 +669,8 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 			} else {
 				watcher = bs.btcWatcher
 			}
-			buf := bytes.NewBuffer(msg.NewlyTx.Data)
-			newlyTx := new(wire.MsgTx)
-			newlyTx.Deserialize(buf)
 
-			validateResult := bs.validateBtcSignTx(msg, newlyTx)
+			validateResult := bs.validateBtcSignTx(msg)
 			if validateResult != validatePass {
 				if validateResult == wrongInputOutput {
 					bsLogger.Error("validate sign tx failed", "sctxid", msg.WatchedTx.Txid)
@@ -694,11 +691,15 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 				return
 			}
 
-			newlyTxId := newlyTx.TxHash().String()
-			signStart := time.Now().UnixNano()
-			sig, ok := watcher.SignTx(newlyTx, bs.signer.PubkeyHash)
-			signEnd := time.Now().UnixNano()
-			bsLogger.Debug("signtime", "scTxID", msg.WatchedTx.Txid, "time", (signEnd-signStart)/1e6)
+			// buf := bytes.NewBuffer(msg.NewlyTx.Data)
+			// newlyTx := new(wire.MsgTx)
+			// newlyTx.Deserialize(buf)
+			// newlyTxid := newlyTx.TxHash().String()
+			// signStart := time.Now().UnixNano()
+			// sig, ok := watcher.SignTx(newlyTx, bs.signer.PubkeyHash)
+			// signEnd := time.Now().UnixNano()
+			// bsLogger.Debug("signtime", "scTxID", msg.WatchedTx.Txid, "time", (signEnd-signStart)/1e6)
+			sig, newlyTxid, ok := signBtcBchtx(watcher, msg, bs.signer.PubkeyHash)
 			if ok != 0 {
 				bsLogger.Error("sign tx failed", "code", ok, "sctxid", msg.WatchedTx.Txid)
 				SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
@@ -711,7 +712,7 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 				tasks.Add(func() { bs.SignHandledEvent.Emit(signResult) })
 				return
 			}
-			bsLogger.Debug("sign bch tx done", "sctxid", msg.WatchedTx.Txid, "newlyTxid", newlyTxId)
+			bsLogger.Debug("sign bch tx done", "sctxid", msg.WatchedTx.Txid, "newlyTxid", newlyTxid)
 			SetSignMsg(bs.db, msg, msg.WatchedTx.Txid)
 			signResult, err := pb.MakeSignedResult(pb.CodeType_SIGNED, bs.localNodeId,
 				msg.WatchedTx.Txid, sig, targetChain, nodeTerm, bs.signer)
@@ -841,6 +842,18 @@ func (bs *BlockStore) handleSignTx(tasks *task.Queue, msg *pb.SignTxRequest) {
 			tasks.Add(func() { bs.SignHandledEvent.Emit(signResult) })
 		}
 	}
+}
+
+func signBtcBchtx(watcher *btcwatcher.MortgageWatcher, req *pb.SignTxRequest, pubkeyHash string) (signres [][]byte, newTxhash string, status int) {
+	buf := bytes.NewBuffer(req.NewlyTx.Data)
+	newlyTx := new(wire.MsgTx)
+	newlyTx.Deserialize(buf)
+	newTxhash = newlyTx.TxHash().String()
+	signStart := time.Now().UnixNano()
+	signres, status = watcher.SignTx(newlyTx, pubkeyHash)
+	signEnd := time.Now().UnixNano()
+	bsLogger.Debug("signtime", "scTxID", req.WatchedTx.Txid, "time", (signEnd-signStart)/1e6)
+	return
 }
 
 // 获取eos签名参数
@@ -1196,7 +1209,11 @@ func (bs *BlockStore) validateETHTx(txInfo *ew.PushEvent, scTxInfo *pb.WatchedTx
 	return mintData.Proposal == scTxInfo.Txid && mintData.Wad == uint64(scTxInfo.RechargeList[0].Amount)
 }
 
-func (bs *BlockStore) validateBtcSignTx(req *pb.SignTxRequest, newlyTx *wire.MsgTx) int {
+func (bs *BlockStore) validateBtcSignTx(req *pb.SignTxRequest) int {
+	buf := bytes.NewBuffer(req.NewlyTx.Data)
+	newlyTx := new(wire.MsgTx)
+	newlyTx.Deserialize(buf)
+
 	if req.WatchedTx.IsTransferTx() {
 		return bs.validateTransferSignTx(req, newlyTx)
 	}
