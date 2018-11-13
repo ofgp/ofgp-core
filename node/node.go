@@ -332,7 +332,7 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 		//删除waitingconfir tx
 		bn.onNewBlockCommitted(newTop)
 		ts.OnNewBlockCommitted(newTop)
-		ac.OnNewCommitted(newTop)
+		// ac.OnNewCommitted(newTop)
 	})
 
 	bs.CommittedInLowerTermEvent.Subscribe(func(msg interface{}) {

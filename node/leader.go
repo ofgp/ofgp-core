@@ -155,8 +155,9 @@ func (ld *Leader) Run(ctx context.Context) {
 				if len(txs) > 0 {
 					ld.tryCreateBlock(txs)
 				} else {
-					ld.tryCreateBlock(nil)
+					// ld.tryCreateBlock(nil)
 				}
+				ld.doHeatbeat()
 			}
 		case newTerm := <-ld.newTermChan:
 			ld.updateTerm(newTerm)
@@ -254,7 +255,8 @@ func (ld *Leader) scanVotePool() {
 		ld.BecomeLeaderEvent.Emit(ld.nodeInfo, ld.term)
 		assert.True(ld.initing == nil)
 		//ld.tryCreateBlock(nil, nil)
-		ld.tryCreateBlock(nil)
+		// ld.tryCreateBlock(nil)
+		ld.doHeatbeat()
 	}
 }
 
@@ -640,7 +642,7 @@ func (ld *Leader) createEOSTx(watchedTx *pb.WatchedTxInfo, account string) *pb.N
 		leaderLogger.Error("create xin tx failed", "from", watchedTx.From)
 		return nil
 	}
-	priceInfo, err := ld.priceTool.GetCurrPrice(symbol)
+	priceInfo, err := ld.priceTool.GetCurrPrice(symbol, false)
 	if err != nil {
 		leaderLogger.Error("get price failed", "err", err, "sctxid", watchedTx.Txid)
 		return nil
@@ -683,4 +685,16 @@ func (ld *Leader) broadcastSign(msg *pb.SignTxRequest, nodes []cluster.NodeInfo,
 			go ld.pm.NotifySignTx(node.Id, msg)
 		}
 	}
+}
+
+func (ld *Leader) doHeatbeat() {
+	votes := make([]*pb.Vote, 0)
+	for _, vote := range ld.votes {
+		votes = append(votes, vote)
+	}
+	msg := &pb.HeatbeatMsg{
+		Term:  ld.term,
+		Votes: votes,
+	}
+	ld.pm.Broadcast(msg, false, false)
 }
