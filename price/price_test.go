@@ -8,7 +8,7 @@ import (
 
 func TestGetCurrPrice(t *testing.T) {
 	tool := price.NewPriceTool("http://127.0.0.1:8000")
-	res, err := tool.GetCurrPrice("BCH-USDT")
+	res, err := tool.GetCurrPrice("BCH-USDT", true)
 	if err != nil {
 		t.Error("get curr price failed, err: ", err)
 	}
@@ -21,7 +21,7 @@ func TestGetCurrPrice(t *testing.T) {
 
 func TestGetPriceByTs(t *testing.T) {
 	tool := price.NewPriceTool("http://127.0.0.1:8000")
-	res, err := tool.GetPriceByTimestamp("BCH-USDT", 1539344897)
+	res, err := tool.GetPriceByTimestamp("BCH-USDT", 1539344897, true)
 	if err != nil {
 		t.Error("get curr price failed, err: ", err)
 	}

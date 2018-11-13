@@ -511,7 +511,7 @@ func (ld *Leader) createBtcTx(watchedTx *pb.WatchedTxInfo, chainType string) *pb
 	for _, a := range watchedTx.RechargeList {
 		if watchedTx.From == "xin" {
 			if priceInfo == nil {
-				priceInfo, err = ld.priceTool.GetCurrPrice(symbol)
+				priceInfo, err = ld.priceTool.GetCurrPrice(symbol, false)
 				if err != nil {
 					leaderLogger.Error("get price failed", "err", err, "sctxid", watchedTx.Txid)
 					return nil
@@ -578,7 +578,7 @@ func (ld *Leader) createXINTx(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 		leaderLogger.Error("create xin tx failed", "from", watchedTx.From)
 		return nil
 	}
-	priceInfo, err := ld.priceTool.GetCurrPrice(symbol)
+	priceInfo, err := ld.priceTool.GetCurrPrice(symbol, true)
 	if err != nil {
 		leaderLogger.Error("get price failed", "err", err, "sctxid", watchedTx.Txid)
 		return nil
