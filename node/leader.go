@@ -642,7 +642,7 @@ func (ld *Leader) createEOSTx(watchedTx *pb.WatchedTxInfo, account string) *pb.N
 		leaderLogger.Error("create xin tx failed", "from", watchedTx.From)
 		return nil
 	}
-	priceInfo, err := ld.priceTool.GetCurrPrice(symbol)
+	priceInfo, err := ld.priceTool.GetCurrPrice(symbol, false)
 	if err != nil {
 		leaderLogger.Error("get price failed", "err", err, "sctxid", watchedTx.Txid)
 		return nil
