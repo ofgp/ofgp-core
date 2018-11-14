@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	eos "github.com/eoscanada/eos-go"
 	"github.com/fsnotify/fsnotify"
 	"github.com/ofgp/bitcoinWatcher/coinmanager"
 	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
@@ -223,7 +224,25 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 		if len(eosURL) > 0 {
 			eosAccount := viper.GetString("DGW.eos_dgateway_account")
 			dbpath := viper.GetString("LEVELDB.eosmain_db_path")
-			eosWatcher = eoswatcher.NewEosWatcherMain(eosURL, localPubkeyHash, eosAccount, dbpath)
+
+			eosSysContract := &eoswatcher.TokenContract{
+				ActionAccount:     eos.AN("eosio.token"),
+				ActionNameDestroy: eos.ActN("transfer"),
+				ActionNameCreate:  eos.ActN("transfer"),
+				Symbol:            "EOS",
+				Precision:         4,
+			}
+			wbchContract := &eoswatcher.TokenContract{
+				ActionAccount:     eos.AN(eosAccount),
+				ActionNameDestroy: eos.ActN("solvent"),
+				ActionNameCreate:  eos.ActN("issue"),
+				Symbol:            "FEOS",
+				Precision:         8,
+			}
+			contracts := []*eoswatcher.TokenContract{
+				eosSysContract, wbchContract,
+			}
+			eosWatcher = eoswatcher.NewEosWatcherMain(eosURL, localPubkeyHash, eosAccount, dbpath, contracts)
 		}
 	}
 

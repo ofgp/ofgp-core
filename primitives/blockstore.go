@@ -1407,32 +1407,38 @@ func (bs *BlockStore) validateEOSSignTx(req *pb.SignTxRequest) int {
 		return wrongInputOutput
 	}
 
-	local, _ := time.LoadLocation("UTC")
-	ts := req.NewlyTx.Timestamp
-	currTs := time.Now().In(local).Unix()
-	if currTs-ts > coinPriceExpire {
-		bsLogger.Error("price timestamp is out of date", "curr", currTs, "reqts", ts, "sctxid", req.WatchedTx.Txid)
-		return wrongInputOutput
-	}
-
-	var symbol string
-	var coinUnit float64
-	if req.WatchedTx.From == "xin" {
+	var amount int64
+	fromChain := req.WatchedTx.From
+	if fromChain == "xin" {
+		local, _ := time.LoadLocation("UTC")
+		ts := req.NewlyTx.Timestamp
+		currTs := time.Now().In(local).Unix()
+		if currTs-ts > coinPriceExpire {
+			bsLogger.Error("price timestamp is out of date", "curr", currTs, "reqts", ts, "sctxid", req.WatchedTx.Txid)
+			return wrongInputOutput
+		}
+		var symbol string
+		var coinUnit float64
 		symbol = "EOS-USD"
 		coinUnit = 10000.0
+
+		priceInfo, err := bs.priceTool.GetPriceByTimestamp(symbol, ts, false)
+		if err != nil {
+			bsLogger.Error("get price info failed", "err", err, "sctxid", req.WatchedTx.Txid)
+			return wrongInputOutput
+		}
+		if len(priceInfo.Err) > 0 {
+			bsLogger.Error("get price info failed", "err", priceInfo.Err, "sctxid", req.WatchedTx.Txid)
+			return wrongInputOutput
+		}
+		amount = getEOSAmountFromXin(req.WatchedTx.RechargeList[0].Amount, float32(priceInfo.Price), coinUnit)
+	} else if fromChain == "bch" || fromChain == "btc" {
+		rechargeAmount := req.WatchedTx.RechargeList[0].Amount
+		amount = rechargeAmount - rechargeAmount*bs.mintFeeRate/10000
 	} else {
+		bsLogger.Error("from type err", "chainType", fromChain, "sctxid", req.WatchedTx.Txid)
 		return wrongInputOutput
 	}
-	priceInfo, err := bs.priceTool.GetPriceByTimestamp(symbol, ts, false)
-	if err != nil {
-		bsLogger.Error("get price info failed", "err", err, "sctxid", req.WatchedTx.Txid)
-		return wrongInputOutput
-	}
-	if len(priceInfo.Err) > 0 {
-		bsLogger.Error("get price info failed", "err", priceInfo.Err, "sctxid", req.WatchedTx.Txid)
-		return wrongInputOutput
-	}
-	amount := getEOSAmountFromXin(req.WatchedTx.RechargeList[0].Amount, float32(priceInfo.Price), coinUnit)
 
 	transer := newlyTx.Actions[0].Data.(*token.Transfer)
 
