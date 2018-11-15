@@ -3,7 +3,6 @@ package primitives
 import (
 	"bytes"
 	"encoding/hex"
-	"encoding/json"
 	"eosc/eoswatcher"
 	"errors"
 	"fmt"
@@ -1393,7 +1392,6 @@ func (bs *BlockStore) validateEOSSignTx(req *pb.SignTxRequest) int {
 		bsLogger.Error("base check tx err", "status", baseCheckResult, "sctxid", req.WatchedTx.Txid)
 		return baseCheckResult
 	}
-
 	pack := &eos.PackedTransaction{
 		Compression:       0,
 		PackedTransaction: req.NewlyTx.Data,
@@ -1410,6 +1408,8 @@ func (bs *BlockStore) validateEOSSignTx(req *pb.SignTxRequest) int {
 
 	var amount int64
 	fromChain := req.WatchedTx.From
+	var addrInAction string
+	var amountInAction int64
 	if fromChain == "xin" {
 		local, _ := time.LoadLocation("UTC")
 		ts := req.NewlyTx.Timestamp
@@ -1433,25 +1433,28 @@ func (bs *BlockStore) validateEOSSignTx(req *pb.SignTxRequest) int {
 			return wrongInputOutput
 		}
 		amount = getEOSAmountFromXin(req.WatchedTx.RechargeList[0].Amount, float32(priceInfo.Price), coinUnit)
+
+		transer := newlyTx.Actions[0].Data.(*token.Transfer)
+		addrInAction = string(transer.To)
+		amountInAction = transer.Quantity.Amount
 	} else if fromChain == "bch" || fromChain == "btc" {
 		rechargeAmount := req.WatchedTx.RechargeList[0].Amount
 		amount = rechargeAmount - rechargeAmount*bs.mintFeeRate/10000
+
+		issue := newlyTx.Actions[0].Data.(*token.Issue)
+		addrInAction = string(issue.To)
+		amountInAction = issue.Quantity.Amount
+
 	} else {
 		bsLogger.Error("from type err", "chainType", fromChain, "sctxid", req.WatchedTx.Txid)
 		return wrongInputOutput
 	}
-	// if newlyTx.Actions[0].Data == nil {
-	txbytes, _ := json.Marshal(newlyTx)
-	bsLogger.Error("eos tx Actions0 data nil", "sctxid", req.WatchedTx.Txid, "data", string(txbytes))
-	// }
-	transer := newlyTx.Actions[0].Data.(*token.Transfer)
 
-	if string(transer.To) == req.WatchedTx.RechargeList[0].Address && transer.Quantity.Amount == int64(amount) {
-		bsLogger.Error("eos tx action param not equal", "actionUser", string(transer.To), "reqUser",
-			req.WatchedTx.RechargeList[0].Address, "actionAmount", transer.Quantity.Amount, "reqAmount", int64(amount))
+	if addrInAction == req.WatchedTx.RechargeList[0].Address && amountInAction == int64(amount) {
+		bsLogger.Info("eos tx validate pass", "sctxid", req.WatchedTx.Txid)
 		return validatePass
 	}
-	bsLogger.Error("validate xin tx failed", "actuser", string(transer.To), "addr", req.WatchedTx.RechargeList[0].Address, "actamount", transer.Quantity.Amount, "amount", amount)
+	bsLogger.Error("validate xin tx failed", "actuser", addrInAction, "addr", req.WatchedTx.RechargeList[0].Address, "actamount", amountInAction, "amount", amount)
 	return wrongInputOutput
 }
 

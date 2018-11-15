@@ -232,7 +232,7 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 				Symbol:            "EOS",
 				Precision:         4,
 			}
-			mintContractAccount := viper.GetString("eos_mint_account")
+			mintContractAccount := viper.GetString("DGW.eos_mint_account")
 			wbchContract := &eoswatcher.TokenContract{
 				ActionAccount:     eos.AN(mintContractAccount),
 				ActionNameDestroy: eos.ActN("solvent"),
@@ -251,6 +251,8 @@ func NewBraftNode(localNodeInfo cluster.NodeInfo) *BraftNode {
 				eosSysContract, wbchContract, wbtcContract,
 			}
 			eosWatcher = eoswatcher.NewEosWatcherMain(eosURL, localPubkeyHash, eosAccount, dbpath, contracts)
+			eosWatcher.ShowRegist()
+			nodeLogger.Debug("create eos main", "account", mintContractAccount)
 		}
 	}
 
