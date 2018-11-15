@@ -446,12 +446,14 @@ func (ld *Leader) createTransaction(ctx context.Context) {
 					} else if tx.Tx.To == "xin" {
 						newlyTx = ld.createXINTx(tx.Tx)
 					} else if tx.Tx.To == "eos" {
-						account := viper.GetString("DGW.eos_dgateway_account")
+
 						// 铸币到eos
 						if tx.Tx.From == "bch" || tx.Tx.From == "btc" {
-							newlyTx = ld.createEosIssueTx(tx.Tx, account)
+							mintAccount := viper.GetString("DGW.eos_mint_account")
+							newlyTx = ld.createEosIssueTx(tx.Tx, mintAccount)
 						} else {
-							newlyTx = ld.createEOSTx(tx.Tx, account)
+							xinAccount := viper.GetString("DGW.eos_dgateway_account")
+							newlyTx = ld.createEOSTx(tx.Tx, xinAccount)
 						}
 					} else {
 						leaderLogger.Error("watched tx wrong type", "type", tx.Tx.To)
@@ -692,6 +694,7 @@ func (ld *Leader) createEosIssueTx(watchedTx *pb.WatchedTxInfo, account string) 
 		return nil
 	}
 	amount = amount - amount*int64(ld.mintFeeRate)/10000
+	leaderLogger.Debug("create eos issue action", "account", account, "recv", receiver, "amount", amount, "symbol", symbol, "sctxid", watchedTx.Txid)
 	action, err := ld.eosWatcher.CreateIssueAction(account, receiver, amount, symbol, watchedTx.Txid)
 	if err != nil {
 		leaderLogger.Error("create eos issue err", "err", err, "sctxid", watchedTx.Txid)

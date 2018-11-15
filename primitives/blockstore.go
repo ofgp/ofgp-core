@@ -3,6 +3,7 @@ package primitives
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"eosc/eoswatcher"
 	"errors"
 	"fmt"
@@ -1439,7 +1440,10 @@ func (bs *BlockStore) validateEOSSignTx(req *pb.SignTxRequest) int {
 		bsLogger.Error("from type err", "chainType", fromChain, "sctxid", req.WatchedTx.Txid)
 		return wrongInputOutput
 	}
-
+	// if newlyTx.Actions[0].Data == nil {
+	txbytes, _ := json.Marshal(newlyTx)
+	bsLogger.Error("eos tx Actions0 data nil", "sctxid", req.WatchedTx.Txid, "data", string(txbytes))
+	// }
 	transer := newlyTx.Actions[0].Data.(*token.Transfer)
 
 	if string(transer.To) == req.WatchedTx.RechargeList[0].Address && transer.Quantity.Amount == int64(amount) {
