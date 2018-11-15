@@ -59,6 +59,7 @@ eth_height = 10000000
 dbpath = "/Users/user/leveldb_data/node0/dgateway"
 eth_client_url = "ws://127.0.0.1:8830"
 eos_dgateway_account = ""
+eos_mint_account = ""
 
 # start_mode指定节点的启动方式，1是正常启动，利用配置文件里面的节点信息建立网关集群，2是加入已有网关集群, 3是以观察节点的方式启动
 start_mode = 1

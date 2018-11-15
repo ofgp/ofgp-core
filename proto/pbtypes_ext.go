@@ -957,9 +957,14 @@ func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 		return nil
 	}
 	memo := &eosMemo{}
-	err := json.Unmarshal(tx.GetData(), memo)
+	data, err := tx.GetData()
+	if err != nil || data == nil {
+		log.Printf("get data from eos err:%v", err)
+		return nil
+	}
+	err = json.Unmarshal(data, memo)
 	if err != nil {
-		log.Printf("unmarshal memo err:%v,data:%s\n", err, tx.GetData())
+		log.Printf("unmarshal memo err:%v,data:%s\n", err, data)
 		return nil
 	}
 	if memo.Chain != "btc" && memo.Chain != "bch" && memo.Chain != "eos" {
@@ -1011,18 +1016,28 @@ func EOSToPbTx(event *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 		return nil
 	}
 	memo := &eosMemo{}
-	err := json.Unmarshal(event.GetData(), memo)
-	if err != nil {
-		log.Printf("unmarshal memo err:%v,data:%s\n", err, event.GetData())
+	data, err := event.GetData()
+	if err != nil || data == nil {
+		log.Printf("get data from eos err:%v", err)
 		return nil
 	}
-	if memo.Chain != "xin" {
+	err = json.Unmarshal(data, memo)
+	if err != nil {
+		log.Printf("unmarshal memo err:%v,data:%s\n", err, data)
+		return nil
+	}
+	if memo.Chain != "xin" && memo.Chain != "bch" && memo.Chain != "btc" {
 		log.Printf("eos chain type err chain:%s\n", memo.Chain)
 		return nil
 	}
-	if !checkEOSAddr(memo.Address) {
+	//check eos account
+	if memo.Chain == "xin" && !checkEOSAddr(memo.Address) {
 		log.Printf("eosEvent addr wrong addr:%s", memo.Address)
 		return nil
+	}
+	//check btc bch addr
+	if memo.Chain == "bch" || memo.Chain == "btc" {
+
 	}
 	watchedTx := &WatchedTxInfo{
 		Txid:      event.GetTxID(),

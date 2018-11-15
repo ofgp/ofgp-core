@@ -446,8 +446,15 @@ func (ld *Leader) createTransaction(ctx context.Context) {
 					} else if tx.Tx.To == "xin" {
 						newlyTx = ld.createXINTx(tx.Tx)
 					} else if tx.Tx.To == "eos" {
-						account := viper.GetString("DGW.eos_dgateway_account")
-						newlyTx = ld.createEOSTx(tx.Tx, account)
+
+						// 铸币到eos
+						if tx.Tx.From == "bch" || tx.Tx.From == "btc" {
+							mintAccount := viper.GetString("DGW.eos_mint_account")
+							newlyTx = ld.createEosIssueTx(tx.Tx, mintAccount)
+						} else {
+							xinAccount := viper.GetString("DGW.eos_dgateway_account")
+							newlyTx = ld.createEOSTx(tx.Tx, xinAccount)
+						}
 					} else {
 						leaderLogger.Error("watched tx wrong type", "type", tx.Tx.To)
 						continue
@@ -670,6 +677,43 @@ func (ld *Leader) createEOSTx(watchedTx *pb.WatchedTxInfo, account string) *pb.N
 		return nil
 	}
 	return &pb.NewlyTx{Data: pack.PackedTransaction, Timestamp: priceInfo.Timestamp}
+}
+
+// createEosIssueTx 发行 eos token
+func (ld *Leader) createEosIssueTx(watchedTx *pb.WatchedTxInfo, account string) *pb.NewlyTx {
+
+	amount := watchedTx.RechargeList[0].Amount
+	receiver := watchedTx.RechargeList[0].Address
+	var symbol string
+	if watchedTx.From == "btc" {
+		symbol = "WBTC"
+	} else if watchedTx.From == "bch" {
+		symbol = "WBCH"
+	} else {
+		leaderLogger.Error("from type err", "from", watchedTx.From, watchedTx.Txid)
+		return nil
+	}
+	amount = amount - amount*int64(ld.mintFeeRate)/10000
+	leaderLogger.Debug("create eos issue action", "account", account, "recv", receiver, "amount", amount, "symbol", symbol, "sctxid", watchedTx.Txid)
+	action, err := ld.eosWatcher.CreateIssueAction(account, receiver, amount, symbol, watchedTx.Txid)
+	if err != nil {
+		leaderLogger.Error("create eos issue err", "err", err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	tx, err := ld.eosWatcher.CreateTx(action, 10*time.Minute)
+	if err != nil {
+		leaderLogger.Error("create eostoken tx err", "err", err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	pack, err := tx.Pack(0)
+	if err != nil {
+		leaderLogger.Error("pack eostoken tx failed", "err", err, "sctxid", watchedTx.Txid)
+		return nil
+	}
+	return &pb.NewlyTx{
+		Data:   pack.PackedTransaction,
+		Amount: amount,
+	}
 }
 
 // 广播签名交易, 对于ETH，广播给其他节点即可；对于BTC/BCH，广播之后还需要收集返回的签名，按顺序merge之后去公链上发送交易
