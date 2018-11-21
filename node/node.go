@@ -543,8 +543,7 @@ func (bn *BraftNode) Run() {
 
 	if startMode != cluster.ModeWatch && startMode != cluster.ModeTest {
 		bn.accuser.OnTermChange(bn.blockStore.GetNodeTerm()) // init accuser's term
-		// stop watching for now bacause of the hard fork of bch
-		// go bn.watchNewTx(ctx)
+		go bn.watchNewTx(ctx)
 		go bn.voteDaemon(ctx)
 		go bn.dealWaitingChan(ctx)
 		go bn.watchWatingConfirmTx(ctx)
