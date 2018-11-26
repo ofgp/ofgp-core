@@ -838,6 +838,19 @@ func (bn *BraftNode) dealEthEvent(ev *ew.PushEvent) {
 			return
 		}
 		nodeLogger.Debug("contract voter removed")
+	case ew.VOTE_METHOD_RECVETHER:
+		if (ev.Events & ew.TX_STATUS_FAILED) != 0 {
+			nodeLogger.Debug("recvether tx is failed in contract")
+			return
+		}
+		etherData := ev.ExtraData.(*ew.ExtraEther)
+		nodeLogger.Debug("receive recvEther", "sctxid", etherData.ScTxid)
+		watchedTx := pb.RecvEtherToPbTx(etherData)
+		if watchedTx != nil {
+			bn.txStore.AddWatchedTx(watchedTx)
+		} else {
+			nodeLogger.Debug("create watchedTx fromether", "sctxid", etherData.ScTxid)
+		}
 	}
 	// 保存ETH监听的高度和高度内的交易索引
 	bn.blockStore.SetETHBlockHeight(ev.Tx.BlockNumber)

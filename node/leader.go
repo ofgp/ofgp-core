@@ -571,10 +571,20 @@ func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 	addredss := ew.HexToAddress(watchedTx.RechargeList[0].Address)
 	amount := watchedTx.RechargeList[0].Amount - watchedTx.RechargeList[0].Amount*int64(ld.mintFeeRate)/10000
 	leaderLogger.Debug("createETHInput final amount", "amount", amount, "feerate", ld.mintFeeRate, "oriamount", watchedTx.RechargeList[0].Amount)
-	input, err := ld.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, watchedTx.TokenTo, uint64(amount),
-		addredss, watchedTx.Txid)
+
+	var input []byte
+	var err error
+	switch watchedTx.From {
+	case "btc":
+		fallthrough
+	case "bch":
+		input, err = ld.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, watchedTx.TokenTo, uint64(amount),
+			addredss, watchedTx.Txid)
+	case "xin":
+		input, err = ld.ethWatcher.EncodeInput(ew.VOTE_METHOD_SENDETHER, addredss, uint64(amount))
+	}
 	if err != nil {
-		leaderLogger.Error("create eth input failed", "err", err, "sctxid", watchedTx.Txid)
+		leaderLogger.Error("create eth input failed", "err", err, "from", watchedTx.From, "sctxid", watchedTx.Txid)
 		return nil
 	}
 	ld.blockStore.SetFinalAmount(amount, watchedTx.Txid)
@@ -594,6 +604,9 @@ func (ld *Leader) createXINTx(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 	} else if watchedTx.From == "eos" {
 		symbol = "EOS-USD"
 		coinUnit = 10000.0
+	} else if watchedTx.From == "eth" {
+		symbol = "ETH-USD"
+		coinUnit = 100000000.0
 	} else {
 		leaderLogger.Error("create xin tx failed", "from", watchedTx.From)
 		return nil
