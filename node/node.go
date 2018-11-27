@@ -851,6 +851,21 @@ func (bn *BraftNode) dealEthEvent(ev *ew.PushEvent) {
 		} else {
 			nodeLogger.Debug("create watchedTx fromether", "sctxid", etherData.ScTxid)
 		}
+	case ew.VOTE_METHOD_SENDETHER:
+
+		if ev.Events&ew.VOTE_TX_SENDETHER == 0 {
+			nodeLogger.Debug("recv eth vote", "txhash", ev.Tx.TxHash.Hex())
+			return
+		}
+		sendEtherData := ev.ExtraData.(*ew.ExtraSendEther)
+		nodeLogger.Debug("recv transfer ether", "txhash", ev.Tx.TxHash.Hex())
+		go func(sctxid string) {
+			bn.mu.Lock()
+			amount := bn.blockStore.GetFinalAmount(sctxid)
+			bn.txStore.CreateInnerTx(ev.Tx.TxHash.Hex(), sctxid, amount)
+			delete(bn.waitingConfirmTxs, sctxid)
+			bn.mu.Unlock()
+		}(sendEtherData.Proposal)
 	}
 	// 保存ETH监听的高度和高度内的交易索引
 	bn.blockStore.SetETHBlockHeight(ev.Tx.BlockNumber)
