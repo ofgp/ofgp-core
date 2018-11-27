@@ -581,7 +581,7 @@ func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 		input, err = ld.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, watchedTx.TokenTo, uint64(amount),
 			addredss, watchedTx.Txid)
 	case "xin":
-		input, err = ld.ethWatcher.EncodeInput(ew.VOTE_METHOD_SENDETHER, addredss, uint64(amount))
+		input, err = ld.ethWatcher.EncodeInput(ew.VOTE_METHOD_SENDETHER, addredss, uint64(amount), watchedTx.Txid)
 	}
 	if err != nil {
 		leaderLogger.Error("create eth input failed", "err", err, "from", watchedTx.From, "sctxid", watchedTx.Txid)
