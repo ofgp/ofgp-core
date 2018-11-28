@@ -3,6 +3,7 @@ package node
 import (
 	"bytes"
 	"eosc/eoswatcher"
+	"math/big"
 	"strconv"
 	"sync"
 	"time"
@@ -594,7 +595,11 @@ func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 			return nil
 		}
 		timestamp = priceInfo.Timestamp
-		amount = int64(float64(watchedTx.RechargeList[0].Amount) * 1000000000000000.0 / float64(priceInfo.Price))
+		ethAmount := big.NewFloat(0.0)
+		ethAmount.Mul(big.NewFloat(float64(watchedTx.RechargeList[0].Amount)), big.NewFloat(1000000000000000))
+		ethAmount.Quo(ethAmount, big.NewFloat(float64(priceInfo.Price)))
+		amount, _ = ethAmount.Int64()
+		// amount = int64(float64(watchedTx.RechargeList[0].Amount) * 1000000000000000.0 / float64(priceInfo.Price))
 		leaderLogger.Debug("createETHInput final amount", "amount", amount, "from", watchedTx.From, "oriamount", watchedTx.RechargeList[0].Amount)
 		input, err = ld.ethWatcher.EncodeInput(ew.VOTE_METHOD_SENDETHER, addredss, uint64(amount), watchedTx.Txid)
 	}

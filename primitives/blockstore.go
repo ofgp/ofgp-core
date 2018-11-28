@@ -1337,7 +1337,11 @@ func (bs *BlockStore) validateEthSignTx(req *pb.SignTxRequest) int {
 		}
 		bsLogger.Debug("validate eth sign, price info", "price", priceInfo.Price, "ts", ts)
 
-		amount := int64(float64(req.WatchedTx.RechargeList[0].Amount) * 1000000000000000.0 / float64(priceInfo.Price))
+		ethAmount := big.NewFloat(0.0)
+		ethAmount.Mul(big.NewFloat(float64(req.WatchedTx.RechargeList[0].Amount)), big.NewFloat(1000000000000000.0))
+		ethAmount.Quo(ethAmount, big.NewFloat(float64(priceInfo.Price)))
+		amount, _ := ethAmount.Int64()
+		// amount := int64(float64(req.WatchedTx.RechargeList[0].Amount) * 1000000000000000.0 / float64(priceInfo.Price))
 
 		localInput, _ = bs.ethWatcher.EncodeInput(ew.VOTE_METHOD_SENDETHER, addredss, uint64(amount), req.WatchedTx.Txid)
 	default:
