@@ -1305,10 +1305,46 @@ func (bs *BlockStore) validateEthSignTx(req *pb.SignTxRequest) int {
 		return wrongInputOutput
 	}
 	addredss := ew.HexToAddress(req.WatchedTx.RechargeList[0].Address)
-	amount := req.WatchedTx.RechargeList[0].Amount - req.WatchedTx.RechargeList[0].Amount*bs.mintFeeRate/10000
-	bsLogger.Debug("validateETHSignTx final amount", "amount", amount, "feerate", bs.mintFeeRate, "oriamount", req.WatchedTx.RechargeList[0].Amount)
-	localInput, _ := bs.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, req.WatchedTx.TokenTo, uint64(amount),
-		addredss, req.WatchedTx.Txid)
+
+	var localInput []byte
+
+	switch req.WatchedTx.From {
+	case "btc":
+		fallthrough
+	case "bch":
+		amount := req.WatchedTx.RechargeList[0].Amount - req.WatchedTx.RechargeList[0].Amount*bs.mintFeeRate/10000
+		bsLogger.Debug("validateETHSignTx final amount", "amount", amount, "feerate", bs.mintFeeRate, "oriamount", req.WatchedTx.RechargeList[0].Amount)
+		localInput, _ = bs.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, req.WatchedTx.TokenTo, uint64(amount),
+			addredss, req.WatchedTx.Txid)
+	case "xin":
+		local, _ := time.LoadLocation("UTC")
+		ts := req.NewlyTx.Timestamp
+		currTs := time.Now().In(local).Unix()
+		// 避免币价信息过期，设定2分钟的限制
+		if currTs-ts > coinPriceExpire {
+			bsLogger.Error("price timestamp is out of date", "curr", currTs, "reqts", ts, "sctxid", req.WatchedTx.Txid)
+			return wrongInputOutput
+		}
+		symbol := "ETH-USD"
+		priceInfo, err := bs.priceTool.GetPriceByTimestamp(symbol, ts, false)
+		if err != nil {
+			bsLogger.Error("get price info failed", "err", err, "sctxid", req.WatchedTx.Txid)
+			return wrongInputOutput
+		}
+		if len(priceInfo.Err) > 0 {
+			bsLogger.Error("get price info failed", "err", priceInfo.Err, "sctxid", req.WatchedTx.Txid)
+			return wrongInputOutput
+		}
+		bsLogger.Debug("validate eth sign, price info", "price", priceInfo.Price, "ts", ts)
+
+		amount := int64(float64(req.WatchedTx.RechargeList[0].Amount) * 1000000000000000.0 / float64(priceInfo.Price))
+
+		localInput, _ = bs.ethWatcher.EncodeInput(ew.VOTE_METHOD_SENDETHER, addredss, uint64(amount), req.WatchedTx.Txid)
+	default:
+		bsLogger.Error("form chain err", "fromchain", req.WatchedTx.From, "sctxid", req.WatchedTx.Txid)
+		return wrongInputOutput
+	}
+
 	if !bytes.Equal(req.NewlyTx.Data, localInput) {
 		bsLogger.Warn("verify eth input not passed", "sctxid", req.WatchedTx.Txid)
 		return wrongInputOutput
