@@ -991,7 +991,10 @@ func (bn *BraftNode) checkTxOnChain(tx *waitingConfirmTx, wg *sync.WaitGroup) {
 		}
 	} else if tx.chainType == "xin" {
 		nodeLogger.Debug("begin filter xin tx", "sctxid", tx.msgId)
-		chainTx, _ := bn.xinWatcher.GetEventByTxid(tx.chainTxId)
+		chainTx, err := bn.xinWatcher.GetEventByTxid(tx.chainTxId)
+		if err != nil {
+			nodeLogger.Error("get xin tx err", "sctxid", tx.msgId, "err", err, "txid", tx.chainTxId)
+		}
 		if chainTx != nil {
 			if !tx.inMem {
 				tx.setInMem()
