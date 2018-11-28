@@ -844,7 +844,7 @@ func (bn *BraftNode) dealEthEvent(ev *ew.PushEvent) {
 			return
 		}
 		etherData := ev.ExtraData.(*ew.ExtraEther)
-		nodeLogger.Debug("receive recvEther", "sctxid", etherData.ScTxid)
+		nodeLogger.Debug("receive recvEther", "sctxid", etherData.ScTxid, "amount", etherData.Amount)
 		watchedTx := pb.RecvEtherToPbTx(etherData)
 		if watchedTx != nil {
 			bn.txStore.AddWatchedTx(watchedTx)

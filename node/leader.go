@@ -569,18 +569,33 @@ func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 	//input, err := ld.ethWatcher.EncodeMint(watchedTx.From, uint64(watchedTx.RechargeList[0].Amount),
 	// 	watchedTx.RechargeList[0].Address, watchedTx.Txid+strconv.FormatInt(util.NowMs(), 10))
 	addredss := ew.HexToAddress(watchedTx.RechargeList[0].Address)
-	amount := watchedTx.RechargeList[0].Amount - watchedTx.RechargeList[0].Amount*int64(ld.mintFeeRate)/10000
-	leaderLogger.Debug("createETHInput final amount", "amount", amount, "feerate", ld.mintFeeRate, "oriamount", watchedTx.RechargeList[0].Amount)
 
 	var input []byte
 	var err error
+	var timestamp int64
+	var amount int64
 	switch watchedTx.From {
 	case "btc":
 		fallthrough
 	case "bch":
+		amount = watchedTx.RechargeList[0].Amount - watchedTx.RechargeList[0].Amount*int64(ld.mintFeeRate)/10000
+		leaderLogger.Debug("createETHInput final amount", "amount", amount, "feerate", ld.mintFeeRate, "oriamount", watchedTx.RechargeList[0].Amount)
 		input, err = ld.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, watchedTx.TokenTo, uint64(amount),
 			addredss, watchedTx.Txid)
 	case "xin":
+		symbol := "ETH-USD"
+		priceInfo, err := ld.priceTool.GetCurrPrice(symbol, false)
+		if err != nil {
+			leaderLogger.Error("get price failed", "err", err, "sctxid", watchedTx.Txid)
+			return nil
+		}
+		if len(priceInfo.Err) > 0 {
+			leaderLogger.Error("get price failed", "err", priceInfo.Err, "sctxid", watchedTx.Txid)
+			return nil
+		}
+		timestamp = priceInfo.Timestamp
+		amount = int64(float64(watchedTx.RechargeList[0].Amount) * 1000000000000000.0 / float64(priceInfo.Price))
+		leaderLogger.Debug("createETHInput final amount", "amount", amount, "from", watchedTx.From, "oriamount", watchedTx.RechargeList[0].Amount)
 		input, err = ld.ethWatcher.EncodeInput(ew.VOTE_METHOD_SENDETHER, addredss, uint64(amount), watchedTx.Txid)
 	}
 	if err != nil {
@@ -606,7 +621,7 @@ func (ld *Leader) createXINTx(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 		coinUnit = 10000.0
 	} else if watchedTx.From == "eth" {
 		symbol = "ETH-USD"
-		coinUnit = 100000000.0
+		coinUnit = 1000000000000000000.0
 	} else {
 		leaderLogger.Error("create xin tx failed", "from", watchedTx.From)
 		return nil

@@ -1356,6 +1356,9 @@ func (bs *BlockStore) validateXINSignTx(req *pb.SignTxRequest) int {
 	} else if req.WatchedTx.From == "eos" {
 		symbol = "EOS-USD"
 		coinUnit = 10000.0
+	} else if req.WatchedTx.From == "eth" {
+		symbol = "ETH-USD"
+		coinUnit = 1000000000000000000.0
 	} else {
 		bsLogger.Error("From type err", "formtype", req.WatchedTx.From, "sctxid", req.WatchedTx.Txid)
 		return wrongInputOutput
