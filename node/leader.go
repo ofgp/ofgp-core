@@ -603,7 +603,7 @@ func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 		return nil
 	}
 	ld.blockStore.SetFinalAmount(amount, watchedTx.Txid)
-	return &pb.NewlyTx{Data: input, Amount: amount}
+	return &pb.NewlyTx{Data: input, Amount: amount, Timestamp: timestamp}
 }
 
 // 暂时没有收取手续费
