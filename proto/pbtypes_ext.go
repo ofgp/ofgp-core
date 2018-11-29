@@ -5,6 +5,7 @@ import (
 	"eosc/eoswatcher"
 	"fmt"
 	"log"
+	"math/big"
 	"regexp"
 	"strings"
 	"time"
@@ -945,6 +946,37 @@ func EthToPbTx(tx *ethwatcher.ExtraBurnData) *WatchedTxInfo {
 	return watchedTx
 }
 
+// RecvEtherToPbTx 接收到eth事件转pb
+func RecvEtherToPbTx(data *ethwatcher.ExtraEther) *WatchedTxInfo {
+	if data.Amount == nil || data.Amount.Cmp(big.NewInt(0)) <= 0 {
+		log.Printf("recvether amount is not right tx:%s", data.ScTxid)
+		return nil
+	}
+	if data.Addr == "" {
+		log.Printf("recvether addr empty recvaddr:%s", data.Addr)
+		return nil
+	}
+	if data.To != "xin" {
+		log.Printf("recvether to err:%s", data.To)
+		return nil
+	}
+	//eth amount 转未gwei
+	gweiAmount := new(big.Int)
+	gweiAmount = gweiAmount.Quo(data.Amount, big.NewInt(1000000000))
+	watchedTx := &WatchedTxInfo{
+		Txid:   data.ScTxid,
+		Amount: gweiAmount.Int64(),
+		From:   data.From,
+		To:     data.To,
+	}
+	rechargeInfo := &AddressInfo{
+		Amount:  gweiAmount.Int64(),
+		Address: data.Addr,
+	}
+	watchedTx.RechargeList = []*AddressInfo{rechargeInfo}
+	return watchedTx
+}
+
 type eosMemo struct {
 	Address string `json:"address"`
 	Chain   string `json:"chain"`
@@ -967,7 +999,7 @@ func XINToPbTx(tx *eoswatcher.EOSPushEvent) *WatchedTxInfo {
 		log.Printf("unmarshal memo err:%v,data:%s\n", err, data)
 		return nil
 	}
-	if memo.Chain != "btc" && memo.Chain != "bch" && memo.Chain != "eos" {
+	if memo.Chain != "btc" && memo.Chain != "bch" && memo.Chain != "eos" && memo.Chain != "eth" {
 		log.Printf("xin chain type err chain:%s\n", memo.Chain)
 		return nil
 	}

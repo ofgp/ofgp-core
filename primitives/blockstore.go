@@ -1305,10 +1305,51 @@ func (bs *BlockStore) validateEthSignTx(req *pb.SignTxRequest) int {
 		return wrongInputOutput
 	}
 	addredss := ew.HexToAddress(req.WatchedTx.RechargeList[0].Address)
-	amount := req.WatchedTx.RechargeList[0].Amount - req.WatchedTx.RechargeList[0].Amount*bs.mintFeeRate/10000
-	bsLogger.Debug("validateETHSignTx final amount", "amount", amount, "feerate", bs.mintFeeRate, "oriamount", req.WatchedTx.RechargeList[0].Amount)
-	localInput, _ := bs.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, req.WatchedTx.TokenTo, uint64(amount),
-		addredss, req.WatchedTx.Txid)
+
+	var localInput []byte
+
+	switch req.WatchedTx.From {
+	case "btc":
+		fallthrough
+	case "bch":
+		amount := req.WatchedTx.RechargeList[0].Amount - req.WatchedTx.RechargeList[0].Amount*bs.mintFeeRate/10000
+		bsLogger.Debug("validateETHSignTx final amount", "amount", amount, "feerate", bs.mintFeeRate, "oriamount", req.WatchedTx.RechargeList[0].Amount)
+		localInput, _ = bs.ethWatcher.EncodeInput(ew.VOTE_METHOD_MINT, req.WatchedTx.TokenTo, uint64(amount),
+			addredss, req.WatchedTx.Txid)
+	case "xin":
+		local, _ := time.LoadLocation("UTC")
+		ts := req.NewlyTx.Timestamp
+		currTs := time.Now().In(local).Unix()
+		// 避免币价信息过期，设定2分钟的限制
+		if currTs-ts > coinPriceExpire {
+			bsLogger.Error("price timestamp is out of date", "curr", currTs, "reqts", ts, "sctxid", req.WatchedTx.Txid)
+			return wrongInputOutput
+		}
+		symbol := "ETH-USD"
+		priceInfo, err := bs.priceTool.GetPriceByTimestamp(symbol, ts, false)
+		if err != nil {
+			bsLogger.Error("get price info failed", "err", err, "sctxid", req.WatchedTx.Txid)
+			return wrongInputOutput
+		}
+		if len(priceInfo.Err) > 0 {
+			bsLogger.Error("get price info failed", "err", priceInfo.Err, "sctxid", req.WatchedTx.Txid)
+			return wrongInputOutput
+		}
+		bsLogger.Debug("validate eth sign, price info", "price", priceInfo.Price, "ts", ts)
+
+		ethAmount := big.NewFloat(0.0)
+		ethAmount.Mul(big.NewFloat(float64(req.WatchedTx.RechargeList[0].Amount)), big.NewFloat(1000000000000000.0))
+		ethAmount.Quo(ethAmount, big.NewFloat(float64(priceInfo.Price)))
+
+		amountWei := new(big.Int)
+		ethAmount.Int(amountWei)
+
+		localInput, _ = bs.ethWatcher.EncodeInput(ew.VOTE_METHOD_SENDETHER, addredss, amountWei, req.WatchedTx.Txid)
+	default:
+		bsLogger.Error("form chain err", "fromchain", req.WatchedTx.From, "sctxid", req.WatchedTx.Txid)
+		return wrongInputOutput
+	}
+
 	if !bytes.Equal(req.NewlyTx.Data, localInput) {
 		bsLogger.Warn("verify eth input not passed", "sctxid", req.WatchedTx.Txid)
 		return wrongInputOutput
@@ -1356,6 +1397,9 @@ func (bs *BlockStore) validateXINSignTx(req *pb.SignTxRequest) int {
 	} else if req.WatchedTx.From == "eos" {
 		symbol = "EOS-USD"
 		coinUnit = 10000.0
+	} else if req.WatchedTx.From == "eth" { //单位gwei
+		symbol = "ETH-USD"
+		coinUnit = 1000000000.0
 	} else {
 		bsLogger.Error("From type err", "formtype", req.WatchedTx.From, "sctxid", req.WatchedTx.Txid)
 		return wrongInputOutput

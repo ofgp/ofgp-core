@@ -838,6 +838,34 @@ func (bn *BraftNode) dealEthEvent(ev *ew.PushEvent) {
 			return
 		}
 		nodeLogger.Debug("contract voter removed")
+	case ew.VOTE_METHOD_RECVETHER:
+		if (ev.Events & ew.TX_STATUS_FAILED) != 0 {
+			nodeLogger.Debug("recvether tx is failed in contract")
+			return
+		}
+		etherData := ev.ExtraData.(*ew.ExtraEther)
+		nodeLogger.Debug("receive recvEther", "sctxid", etherData.ScTxid, "amount", etherData.Amount)
+		watchedTx := pb.RecvEtherToPbTx(etherData)
+		if watchedTx != nil {
+			bn.txStore.AddWatchedTx(watchedTx)
+		} else {
+			nodeLogger.Debug("create watchedTx fromether", "sctxid", etherData.ScTxid)
+		}
+	case ew.VOTE_METHOD_SENDETHER:
+
+		if ev.Events&ew.VOTE_TX_SENDETHER == 0 {
+			nodeLogger.Debug("recv eth vote", "txhash", ev.Tx.TxHash.Hex())
+			return
+		}
+		sendEtherData := ev.ExtraData.(*ew.ExtraSendEther)
+		nodeLogger.Debug("recv transfer ether", "txhash", ev.Tx.TxHash.Hex())
+		go func(sctxid string) {
+			bn.mu.Lock()
+			amount := bn.blockStore.GetFinalAmount(sctxid)
+			bn.txStore.CreateInnerTx(ev.Tx.TxHash.Hex(), sctxid, amount)
+			delete(bn.waitingConfirmTxs, sctxid)
+			bn.mu.Unlock()
+		}(sendEtherData.Proposal)
 	}
 	// 保存ETH监听的高度和高度内的交易索引
 	bn.blockStore.SetETHBlockHeight(ev.Tx.BlockNumber)
@@ -963,7 +991,10 @@ func (bn *BraftNode) checkTxOnChain(tx *waitingConfirmTx, wg *sync.WaitGroup) {
 		}
 	} else if tx.chainType == "xin" {
 		nodeLogger.Debug("begin filter xin tx", "sctxid", tx.msgId)
-		chainTx, _ := bn.xinWatcher.GetEventByTxid(tx.chainTxId)
+		chainTx, err := bn.xinWatcher.GetEventByTxid(tx.chainTxId)
+		if err != nil {
+			nodeLogger.Error("get xin tx err", "sctxid", tx.msgId, "err", err, "txid", tx.chainTxId)
+		}
 		if chainTx != nil {
 			if !tx.inMem {
 				tx.setInMem()
