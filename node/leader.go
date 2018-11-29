@@ -598,10 +598,17 @@ func (ld *Leader) createEthInput(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 		ethAmount := big.NewFloat(0.0)
 		ethAmount.Mul(big.NewFloat(float64(watchedTx.RechargeList[0].Amount)), big.NewFloat(1000000000000000))
 		ethAmount.Quo(ethAmount, big.NewFloat(float64(priceInfo.Price)))
-		amount, _ = ethAmount.Int64()
-		// amount = int64(float64(watchedTx.RechargeList[0].Amount) * 1000000000000000.0 / float64(priceInfo.Price))
+
+		amountWei := new(big.Int)
+		ethAmount.Int(amountWei)
+
+		//网关存储eth gwei
+		amountGwei := new(big.Int)
+		amountGwei.Quo(amountWei, big.NewInt(1000000000))
+		amount = amountGwei.Int64()
+
 		leaderLogger.Debug("createETHInput final amount", "amount", amount, "from", watchedTx.From, "oriamount", watchedTx.RechargeList[0].Amount)
-		input, err = ld.ethWatcher.EncodeInput(ew.VOTE_METHOD_SENDETHER, addredss, uint64(amount), watchedTx.Txid)
+		input, err = ld.ethWatcher.EncodeInput(ew.VOTE_METHOD_SENDETHER, addredss, amountWei, watchedTx.Txid)
 	}
 	if err != nil {
 		leaderLogger.Error("create eth input failed", "err", err, "from", watchedTx.From, "sctxid", watchedTx.Txid)
