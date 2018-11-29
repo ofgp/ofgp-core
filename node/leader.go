@@ -631,9 +631,9 @@ func (ld *Leader) createXINTx(watchedTx *pb.WatchedTxInfo) *pb.NewlyTx {
 	} else if watchedTx.From == "eos" {
 		symbol = "EOS-USD"
 		coinUnit = 10000.0
-	} else if watchedTx.From == "eth" {
+	} else if watchedTx.From == "eth" { //gwei 单位
 		symbol = "ETH-USD"
-		coinUnit = 1000000000000000000.0
+		coinUnit = 1000000000.0
 	} else {
 		leaderLogger.Error("create xin tx failed", "from", watchedTx.From)
 		return nil

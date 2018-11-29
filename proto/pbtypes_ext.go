@@ -5,6 +5,7 @@ import (
 	"eosc/eoswatcher"
 	"fmt"
 	"log"
+	"math/big"
 	"regexp"
 	"strings"
 	"time"
@@ -947,7 +948,7 @@ func EthToPbTx(tx *ethwatcher.ExtraBurnData) *WatchedTxInfo {
 
 // RecvEtherToPbTx 接收到eth事件转pb
 func RecvEtherToPbTx(data *ethwatcher.ExtraEther) *WatchedTxInfo {
-	if data.Amount <= 0 {
+	if data.Amount == nil || data.Amount.Cmp(big.NewInt(0)) <= 0 {
 		log.Printf("recvether amount is not right tx:%s", data.ScTxid)
 		return nil
 	}
@@ -959,14 +960,17 @@ func RecvEtherToPbTx(data *ethwatcher.ExtraEther) *WatchedTxInfo {
 		log.Printf("recvether to err:%s", data.To)
 		return nil
 	}
+	//eth amount 转未gwei
+	gweiAmount := new(big.Int)
+	gweiAmount = gweiAmount.Quo(data.Amount, big.NewInt(1000000000))
 	watchedTx := &WatchedTxInfo{
 		Txid:   data.ScTxid,
-		Amount: int64(data.Amount),
+		Amount: gweiAmount.Int64(),
 		From:   data.From,
 		To:     data.To,
 	}
 	rechargeInfo := &AddressInfo{
-		Amount:  int64(data.Amount),
+		Amount:  gweiAmount.Int64(),
 		Address: data.Addr,
 	}
 	watchedTx.RechargeList = []*AddressInfo{rechargeInfo}
