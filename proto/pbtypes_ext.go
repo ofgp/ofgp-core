@@ -2,7 +2,6 @@ package proto
 
 import (
 	"encoding/json"
-	"eosc/eoswatcher"
 	"fmt"
 	"log"
 	"math/big"
@@ -13,6 +12,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/ofgp/bitcoinWatcher/coinmanager"
 	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
+	"github.com/ofgp/eosc/eoswatcher"
 	"github.com/ofgp/ethwatcher"
 	"github.com/ofgp/ofgp-core/crypto"
 	"github.com/ofgp/ofgp-core/util"

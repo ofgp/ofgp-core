@@ -3,7 +3,6 @@ package primitives
 import (
 	"bytes"
 	"encoding/hex"
-	"eosc/eoswatcher"
 	"errors"
 	"fmt"
 	"math/big"
@@ -17,6 +16,7 @@ import (
 	"github.com/eoscanada/eos-go/token"
 	btcfunc "github.com/ofgp/bitcoinWatcher/coinmanager"
 	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
+	"github.com/ofgp/eosc/eoswatcher"
 	ew "github.com/ofgp/ethwatcher"
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/crypto"

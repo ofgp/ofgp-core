@@ -3,7 +3,6 @@ package node
 import (
 	"bytes"
 	"encoding/hex"
-	"eosc/eoswatcher"
 	"errors"
 	"sync"
 	"sync/atomic"
@@ -13,6 +12,7 @@ import (
 	"github.com/eoscanada/eos-go"
 	"github.com/eoscanada/eos-go/ecc"
 	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
+	"github.com/ofgp/eosc/eoswatcher"
 	"github.com/ofgp/ofgp-core/cluster"
 	pb "github.com/ofgp/ofgp-core/proto"
 	"github.com/ofgp/ofgp-core/util/assert"

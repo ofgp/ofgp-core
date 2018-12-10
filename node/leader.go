@@ -2,13 +2,13 @@ package node
 
 import (
 	"bytes"
-	"eosc/eoswatcher"
 	"math/big"
 	"strconv"
 	"sync"
 	"time"
 
 	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
+	"github.com/ofgp/eosc/eoswatcher"
 	ew "github.com/ofgp/ethwatcher"
 	"github.com/ofgp/ofgp-core/cluster"
 	"github.com/ofgp/ofgp-core/crypto"

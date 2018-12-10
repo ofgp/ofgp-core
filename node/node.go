@@ -3,7 +3,6 @@ package node
 import (
 	"context"
 	"encoding/hex"
-	"eosc/eoswatcher"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -21,6 +20,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/ofgp/bitcoinWatcher/coinmanager"
 	btcwatcher "github.com/ofgp/bitcoinWatcher/mortgagewatcher"
+	"github.com/ofgp/eosc/eoswatcher"
 	ew "github.com/ofgp/ethwatcher"
 	"github.com/ofgp/ofgp-core/accuser"
 	"github.com/ofgp/ofgp-core/cluster"
